@@ -4,7 +4,8 @@ import * as THREE from 'three';
 const vertexShader = `
     uniform float uTime;
     uniform float uMorphProgress;
-    uniform float uScatterForce; // NEW: Explosion force multiplier
+    uniform float uScatterForce; 
+    uniform float uFistProgress; // NEW: Nebula morph slider
     
     attribute float aRandom;
     attribute vec3 aTargetPosition;
@@ -24,10 +25,20 @@ const vertexShader = `
         targetPos.y += cos(uTime * 1.2 + aRandom * 20.0) * 0.05;
         targetPos.z += sin(uTime * 0.8 + aRandom * 20.0) * 0.05;
 
-        // THE MAGIC: Smoothly blend between State A and State B
+        // Blends to Thumbs Up
         vec3 finalPos = mix(idlePos, targetPos, uMorphProgress);
 
-        // STATE C: THE EXPLOSION
+        // STATE C: THE FIST NEBULA
+        // Creates a dense, rapidly swirling cluster of all 50k particles
+        vec3 nebulaPos = vec3(
+            sin(uTime * 3.0 + aRandom * 100.0) * (aRandom * 4.0),
+            cos(uTime * 2.5 + aRandom * 100.0) * (aRandom * 4.0),
+            sin(uTime * 3.5 + aRandom * 100.0) * (aRandom * 4.0)
+        );
+        // Blends the current state into the Nebula cluster
+        finalPos = mix(finalPos, nebulaPos, uFistProgress);
+
+        // STATE D: THE EXPLOSION
         // Generate a random 3D outward direction for every single particle
         float angle1 = aRandom * 6.28318 * 100.0; // Random yaw
         float angle2 = aRandom * 3.14159 * 100.0; // Random pitch
@@ -37,16 +48,15 @@ const vertexShader = `
             cos(angle2)
         );
         
-        // Blast the particles outward along their random vector!
-        // The multiplier (40.0) controls the maximum radius of the explosion
         finalPos += explosionDir * (uScatterForce * 40.0);
 
-        // Visibility Math (5,000 particles visible during morph)
+        // Visibility Math
         float isExtra = step(0.10, aRandom);
         float visibility = 1.0 - (isExtra * uMorphProgress);
         
-        // NEW: Force ALL particles to become instantly visible during the explosion for max impact!
+        // Force ALL particles to become instantly visible during explosion and fist!
         visibility = max(visibility, uScatterForce);
+        visibility = max(visibility, uFistProgress); 
         vVisibility = visibility;
 
         vec4 mvPosition = modelViewMatrix * vec4(finalPos, 1.0);
@@ -86,9 +96,11 @@ export class ParticleSystem {
         this.uniforms = {
             uTime: { value: 0.0 },
             uMorphProgress: { value: 0.0 },
-            uScatterForce: { value: 0.0 } // NEW
+            uScatterForce: { value: 0.0 },
+            uFistProgress: { value: 0.0 } // NEW
         };
         this.targetMorph = 0.0; 
+        this.targetFist = 0.0; // NEW
         this.thumbsUpPoints = [{x: 0, y: 0}]; 
         
         this.createShapeData();
@@ -173,6 +185,7 @@ export class ParticleSystem {
 
     morphToHand(landmarks) {
         this.targetMorph = 1.0; 
+        this.targetFist = 0.0; // Clear fist state
         if (this.thumbsUpPoints.length <= 1) return;
 
         const targetPositions = this.geometry.attributes.aTargetPosition.array;
@@ -190,23 +203,28 @@ export class ParticleSystem {
         this.geometry.attributes.aTargetPosition.needsUpdate = true;
     }
 
-    resetIdle() {
+    // NEW: Morph to the dense Nebula cluster
+    morphToFist() {
+        this.targetFist = 1.0;
         this.targetMorph = 0.0;
     }
 
-    // NEW: Triggers the explosion
+    resetIdle() {
+        this.targetMorph = 0.0;
+        this.targetFist = 0.0; // Clear fist state
+    }
+
     triggerScatter() {
-        this.uniforms.uScatterForce.value = 1.0; // Spike the force
-        this.targetMorph = 0.0; // Release the thumbs up morph if active
+        this.uniforms.uScatterForce.value = 1.0; 
+        this.targetMorph = 0.0; 
+        this.targetFist = 0.0; // Clear fist state immediately on explosion
     }
 
     update(elapsedTime) {
         this.uniforms.uTime.value = elapsedTime;
         this.uniforms.uMorphProgress.value += (this.targetMorph - this.uniforms.uMorphProgress.value) * 0.05;
+        this.uniforms.uFistProgress.value += (this.targetFist - this.uniforms.uFistProgress.value) * 0.1; // Lerps to nebula (0.1 is slightly faster snap)
 
-        // NEW: Friction/Drag
-        // Multiplies the force by 0.95 every frame. 
-        // It starts fast (1.0), drops rapidly (0.95, 0.90, 0.85), and smoothly coasts to 0.0
         this.uniforms.uScatterForce.value *= 0.95; 
     }
 }

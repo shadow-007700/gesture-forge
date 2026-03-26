@@ -41,7 +41,7 @@ async function bootApp() {
 
     // Keep track of state so we don't recalculate the hand map 60 times a second
     let isMorphed = false;
-    let lastGesture = "None"; // NEW: Tracks the previous frame's gesture
+    let lastFistTime = 0; // NEW: Tracks the exact timestamp a fist was seen
 
     tracker.onGestureDetected = (gestureName, landmarks) => {
         gestureOutputElement.innerText = gestureName;
@@ -50,12 +50,19 @@ async function bootApp() {
             gestureOutputElement.style.opacity = 0.3;
             
             // If they drop their hand, return to idle
-            if (isMorphed) {
+            if (isMorphed || particles.targetFist > 0) {
                 particles.resetIdle();
                 isMorphed = false;
             }
         } else {
             gestureOutputElement.style.opacity = 1.0;
+
+            // NEW: Handle Fist / Nebula Cluster
+            if (gestureName === "Closed_Fist") {
+                lastFistTime = Date.now(); // Record the exact time we saw the fist
+                particles.morphToFist();   // Trigger the dense nebula cluster!
+                isMorphed = false;
+            }
 
             // Trigger the Morph ONLY ONCE when a thumbs up is recognized!
             if (gestureName === "Thumb_Up" && !isMorphed) {
@@ -63,16 +70,18 @@ async function bootApp() {
                 isMorphed = true;
             }
             
-            // NEW: The Combo Scatter Trigger!
-            // If the user was making a fist, and suddenly opens their hand... EXPLODE!
-            if (gestureName === "Open_Palm" && lastGesture === "Closed_Fist") {
+            // NEW: The Time-Window Combo Trigger!
+            // If Open Palm is detected AND a Fist was seen within the last 600ms (0.6s)
+            if (gestureName === "Open_Palm" && (Date.now() - lastFistTime < 600)) {
                 particles.triggerScatter();
-                isMorphed = false; // Reset the morph state
+                isMorphed = false; 
+                lastFistTime = 0; // Reset timer so it doesn't double-trigger
+            } else if (gestureName === "Open_Palm") {
+                // If they just hold an open palm without a combo, clear other states
+                particles.resetIdle();
+                isMorphed = false;
             }
         }
-        
-        // Record this gesture to check against in the next frame
-        lastGesture = gestureName;
     };
 }
 
