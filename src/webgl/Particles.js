@@ -5,12 +5,13 @@ const vertexShader = `
     uniform float uTime;
     uniform float uMorphProgress;
     uniform float uScatterForce; 
-    uniform float uFistProgress; // NEW: Nebula morph slider
+    uniform float uFistProgress; 
     
     attribute float aRandom;
     attribute vec3 aTargetPosition;
     
     varying float vVisibility;
+    varying vec3 vColor; // NEW: Pass dynamic colors to the fragment shader!
     
     void main() {
         // STATE A: Idle floating
@@ -28,58 +29,78 @@ const vertexShader = `
         // Blends to Thumbs Up
         vec3 finalPos = mix(idlePos, targetPos, uMorphProgress);
 
-        // STATE C: THE FIST NEBULA (Organic Dust Cloud)
-        // 1. Organic Clumping: Break the perfect sphere for a natural look
-        float nRadius = pow(aRandom, 0.4) * 10.0; // Wider base spread
-        float nTheta = fract(aRandom * 123.456) * 6.28318;
-        float nPhi = acos(2.0 * fract(aRandom * 789.123) - 1.0);
+        // --- TRUE CHAOS RANDOMNESS ---
+        float rand1 = fract(sin(aRandom * 12.9898) * 43758.5453);
+        float rand2 = fract(sin(aRandom * 78.2330) * 43758.5453);
+        float rand3 = fract(sin(aRandom * 39.3460) * 43758.5453);
 
-        // Add turbulence to the radius to create cloudy "arms"
-        nRadius += sin(nTheta * 4.0) * 2.0;
-        nRadius += sin(nPhi * 3.0) * 1.5;
+        // STATE C: THE FIST NEBULA (Volumetric Swirl)
+        // Adjusted exponential curve for a softer, more voluminous spread
+        float nRadius = pow(rand1, 2.5) * 14.0; 
+        float nTheta = rand2 * 6.28318; 
+        float nPhi = acos(2.0 * rand3 - 1.0); 
 
         vec3 cloudPos = vec3(
             nRadius * sin(nPhi) * cos(nTheta),
-            nRadius * sin(nPhi) * sin(nTheta) * 0.25, // Flatter disk
-            nRadius * cos(nPhi)
+            nRadius * cos(nPhi) * 0.6, // FIX: Less vertical squash for true 3D volume
+            nRadius * sin(nPhi) * sin(nTheta)
         );
 
-        // Slowly rotate and add gentle drift
-        float rot = uTime * 0.2;
+        // FIX: Add the "Vortex Twist" to create natural galaxy arms
+        float distToCenter = length(cloudPos);
+        float twist = -distToCenter * 0.35; // Twist strength
+        float s = sin(twist);
+        float c = cos(twist);
+        // Rotate the X and Z axes based on how far out the particle is
+        cloudPos.xz = vec2(
+            cloudPos.x * c - cloudPos.z * s,
+            cloudPos.x * s + cloudPos.z * c
+        );
+
+        // Slowly rotate the entire structure
+        float rot = uTime * 0.15;
         vec3 nebulaPos = vec3(
             cloudPos.x * cos(rot) - cloudPos.z * sin(rot),
             cloudPos.y + sin(uTime * 1.5 + aRandom * 10.0) * 0.2,
             cloudPos.x * sin(rot) + cloudPos.z * cos(rot)
         );
 
-        // Blends the current state into the Nebula cluster
         finalPos = mix(finalPos, nebulaPos, uFistProgress);
 
-        // STATE D: THE EXPLOSION
-        // Generate a random 3D outward direction for every single particle
-        float angle1 = aRandom * 6.28318 * 100.0; // Random yaw
-        float angle2 = aRandom * 3.14159 * 100.0; // Random pitch
-        vec3 explosionDir = vec3(
-            sin(angle2) * cos(angle1),
-            sin(angle2) * sin(angle1),
-            cos(angle2)
-        );
+        // --- NEW: DYNAMIC IONIZED COLORING ---
+        vec3 baseColor = vec3(0.0, 1.0, 0.5); // Classic neon green
         
+        // Calculate a hot Cyan core fading out into a deep Pink/Purple edge
+        float colorMix = clamp(distToCenter / 12.0, 0.0, 1.0);
+        vec3 coreColor = vec3(0.1, 0.8, 1.0); // Hot Cyan
+        vec3 edgeColor = vec3(0.8, 0.1, 0.6); // Deep Pink
+        vec3 nebulaColor = mix(coreColor, edgeColor, colorMix);
+        
+        // Add occasional pure white "stars" mixed into the dust
+        float isStar = step(0.97, rand1);
+        nebulaColor = mix(nebulaColor, vec3(1.0, 1.0, 1.0), isStar);
+
+        // Blend colors based on whether we are in the Nebula state
+        vColor = mix(baseColor, nebulaColor, uFistProgress);
+
+        // STATE D: THE EXPLOSION
+        vec3 explosionDir = vec3(
+            sin(nPhi) * cos(nTheta),
+            sin(nPhi) * sin(nTheta),
+            cos(nPhi)
+        );
         finalPos += explosionDir * (uScatterForce * 40.0);
 
         // --- Visibility Math ---
         float vis = 1.0;
-        // Thumbs Up: Fade down to ~10% of particles (5k)
         vis = mix(vis, 1.0 - step(0.10, aRandom), uMorphProgress);
+        // Retain 8% of particles (4,000) for a thicker, softer cloud
+        vis = mix(vis, 1.0 - step(0.08, aRandom), uFistProgress);
         
-        // Nebula FIX: Fade down to ~4% of particles (2k). Removes the solid blob look!
-        vis = mix(vis, 1.0 - step(0.04, aRandom), uFistProgress);
-        
-        // Explosion: Flash ALL particles to 100% visibility for maximum impact
         float finalVis = max(vis, uScatterForce);
         
-        // Add a random dimming effect so the nebula isn't uniformly bright
-        float dimming = mix(1.0, fract(aRandom * 333.333) * 0.6 + 0.4, uFistProgress);
+        // Gentle dimming so outer edges look more like smoke
+        float dimming = mix(1.0, fract(aRandom * 333.333) * 0.7 + 0.3, uFistProgress);
         vVisibility = finalVis * dimming;
 
         vec4 mvPosition = modelViewMatrix * vec4(finalPos, 1.0);
@@ -88,16 +109,14 @@ const vertexShader = `
         float idleSize = 10.0 * aRandom + 5.0;
         float morphedSize = 30.0 * aRandom + 15.0;
         
-        // Nebula FIX: Power Curve! 
-        // 90% of particles become tiny "stars" (3px)
-        // 10% become massive glowing "gas clouds" (up to 80px)
+        // FIX: Smoother size curve. 
+        // Max size is 45px (prevents giant distinct marbles), exponent 3.0 creates more overlapping medium gas clouds
         float randomGas = fract(aRandom * 555.555);
-        float nebulaSize = 80.0 * pow(randomGas, 6.0) + 3.0; 
+        float nebulaSize = 45.0 * pow(randomGas, 3.0) + 3.0; 
         
         float currentSize = mix(idleSize, morphedSize, uMorphProgress);
         currentSize = mix(currentSize, nebulaSize, uFistProgress);
         
-        // Ensure particles get slightly larger during the explosion so it feels thick
         currentSize += uScatterForce * 15.0; 
         
         gl_PointSize = currentSize * (2.0 / -mvPosition.z) * finalVis;
@@ -107,6 +126,7 @@ const vertexShader = `
 
 const fragmentShader = `
     varying float vVisibility;
+    varying vec3 vColor; // NEW: Receive the dynamic color from vertex shader
 
     void main() {
         float distanceToCenter = distance(gl_PointCoord, vec2(0.5));
@@ -115,7 +135,8 @@ const fragmentShader = `
         float alpha = (0.5 / distanceToCenter - 1.0) * vVisibility;
         if (alpha <= 0.0) discard;
         
-        gl_FragColor = vec4(0.0, 1.0, 0.5, alpha * 0.6); 
+        // FIX: Use the dynamic color instead of hardcoded green!
+        gl_FragColor = vec4(vColor, alpha * 0.6); 
     }
 `;
 // -----------------------
@@ -128,10 +149,10 @@ export class ParticleSystem {
             uTime: { value: 0.0 },
             uMorphProgress: { value: 0.0 },
             uScatterForce: { value: 0.0 },
-            uFistProgress: { value: 0.0 } // NEW
+            uFistProgress: { value: 0.0 } 
         };
         this.targetMorph = 0.0; 
-        this.targetFist = 0.0; // NEW
+        this.targetFist = 0.0; 
         this.thumbsUpPoints = [{x: 0, y: 0}]; 
         
         this.createShapeData();
@@ -216,7 +237,7 @@ export class ParticleSystem {
 
     morphToHand(landmarks) {
         this.targetMorph = 1.0; 
-        this.targetFist = 0.0; // Clear fist state
+        this.targetFist = 0.0; 
         if (this.thumbsUpPoints.length <= 1) return;
 
         const targetPositions = this.geometry.attributes.aTargetPosition.array;
@@ -234,7 +255,6 @@ export class ParticleSystem {
         this.geometry.attributes.aTargetPosition.needsUpdate = true;
     }
 
-    // NEW: Morph to the dense Nebula cluster
     morphToFist() {
         this.targetFist = 1.0;
         this.targetMorph = 0.0;
@@ -242,19 +262,19 @@ export class ParticleSystem {
 
     resetIdle() {
         this.targetMorph = 0.0;
-        this.targetFist = 0.0; // Clear fist state
+        this.targetFist = 0.0; 
     }
 
     triggerScatter() {
         this.uniforms.uScatterForce.value = 1.0; 
         this.targetMorph = 0.0; 
-        this.targetFist = 0.0; // Clear fist state immediately on explosion
+        this.targetFist = 0.0; 
     }
 
     update(elapsedTime) {
         this.uniforms.uTime.value = elapsedTime;
         this.uniforms.uMorphProgress.value += (this.targetMorph - this.uniforms.uMorphProgress.value) * 0.05;
-        this.uniforms.uFistProgress.value += (this.targetFist - this.uniforms.uFistProgress.value) * 0.1; // Lerps to nebula (0.1 is slightly faster snap)
+        this.uniforms.uFistProgress.value += (this.targetFist - this.uniforms.uFistProgress.value) * 0.1; 
 
         this.uniforms.uScatterForce.value *= 0.95; 
     }
