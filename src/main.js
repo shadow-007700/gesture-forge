@@ -1,83 +1,72 @@
-import { HandTracker } from './cv/HandTracker.js';
-import { WebGLScene } from './webgl/Scene.js';
 import { ParticleSystem } from './webgl/Particles.js';
+import { WebGLScene } from './webgl/Scene.js';
+import { HandTracker } from './cv/HandTracker.js';
 import './style.css';
 
-const videoElement = document.getElementById('webcam');
-const statusElement = document.getElementById('status');
-const gestureOutputElement = document.getElementById('gesture-output');
-
-const tracker = new HandTracker(videoElement);
-const scene = new WebGLScene();
-const particles = new ParticleSystem(scene.scene);
-
-// Connect the Scene's animation loop to the Particle System
-scene.onTick = (elapsedTime) => {
-    particles.update(elapsedTime);
-};
-
 async function bootApp() {
-    statusElement.innerText = "Loading AI Model from local files...";
-    const modelLoaded = await tracker.init();
-    
-    if (!modelLoaded) {
-        statusElement.innerText = "Error: Could not load AI model.";
-        return;
-    }
+    const statusElement = document.getElementById('status');
+    const gestureOutputElement = document.getElementById('gesture-output');
+    const videoElement = document.getElementById('webcam');
 
+    // 1. Initialize WebGL Scene
+    const webgl = new WebGLScene();
+    const particles = new ParticleSystem(webgl.scene);
+
+    webgl.onTick = (elapsedTime) => {
+        particles.update(elapsedTime);
+    };
+    webgl.start();
+
+    // 2. Initialize Computer Vision
+    const tracker = new HandTracker(videoElement);
+    
+    statusElement.innerText = "Loading AI Model...";
+    await tracker.init();
+    
     statusElement.innerText = "Model loaded. Please allow webcam access...";
     try {
         await tracker.startWebcam();
         statusElement.innerText = "Tracking Active - Show your hand!";
         statusElement.style.color = "#00ff88";
-
-        // Start rendering the 3D scene!
-        scene.start();
     } catch (err) {
         statusElement.innerText = "Error: Webcam access denied.";
         statusElement.style.color = "#ff4444";
         return;
     }
 
-    // Keep track of state so we don't recalculate the hand map 60 times a second
+    // Keep track of state outside the loop
     let isMorphed = false;
-    let lastFistTime = 0; // NEW: Tracks the exact timestamp a fist was seen
+    let lastFistTime = 0;
 
     tracker.onGestureDetected = (gestureName, landmarks) => {
         gestureOutputElement.innerText = gestureName;
         
         if (gestureName === "None") {
             gestureOutputElement.style.opacity = 0.3;
-            
-            // If they drop their hand, return to idle
-            if (isMorphed || particles.targetFist > 0) {
-                particles.resetIdle();
-                isMorphed = false;
-            }
+            particles.resetIdle();
+            isMorphed = false;
         } else {
             gestureOutputElement.style.opacity = 1.0;
 
-            // NEW: Handle Fist / Nebula Cluster
             if (gestureName === "Closed_Fist") {
-                lastFistTime = Date.now(); // Record the exact time we saw the fist
-                particles.morphToFist();   // Trigger the dense nebula cluster!
+                lastFistTime = Date.now();
+                particles.morphToFist();
                 isMorphed = false;
             }
-
-            // Trigger the Morph ONLY ONCE when a thumbs up is recognized!
-            if (gestureName === "Thumb_Up" && !isMorphed) {
-                particles.morphToHand(landmarks);
-                isMorphed = true;
-            }
-            
-            // NEW: The Time-Window Combo Trigger!
-            // If Open Palm is detected AND a Fist was seen within the last 600ms (0.6s)
-            if (gestureName === "Open_Palm" && (Date.now() - lastFistTime < 600)) {
+            else if (gestureName === "Open_Palm" && (Date.now() - lastFistTime < 600)) {
                 particles.triggerScatter();
+                lastFistTime = 0; // Reset combo timer
                 isMorphed = false; 
-                lastFistTime = 0; // Reset timer so it doesn't double-trigger
-            } else if (gestureName === "Open_Palm") {
-                // If they just hold an open palm without a combo, clear other states
+            }
+            else if (gestureName === "Thumb_Up") {
+                if (!isMorphed) {
+                    particles.morphToHand(landmarks);
+                    isMorphed = true;
+                }
+            }
+            else {
+                // BUG FIX: Catch-all for Pointing_Up, ILoveYou, or Open_Palm (no combo).
+                // This guarantees the nebula never gets "stuck"
                 particles.resetIdle();
                 isMorphed = false;
             }

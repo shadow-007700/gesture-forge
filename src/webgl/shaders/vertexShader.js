@@ -81,17 +81,41 @@ export const vertexShader = `
             sin(nPhi) * sin(nTheta),
             cos(nPhi)
         );
-        finalPos += explosionDir * (uScatterForce * 40.0);
+        
+        // Split the explosion force into two phases
+        float scatterPhase1 = clamp(uScatterForce, 0.0, 1.0);
+        float scatterPhase2 = clamp(uScatterForce - 1.0, 0.0, 1.0);
+        
+        // BUG FIX 1: Add chaotic speed variance so it is a messy burst, not a hollow bubble!
+        float speedVariance = rand2 * 0.8 + 0.2; 
+        
+        // BUG FIX 2: Reduce max distance from 60.0 to 25.0 so they don't shrink to infinity due to perspective
+        float scatterDist = (1.0 - pow(1.0 - scatterPhase1, 3.0)) * (25.0 * speedVariance);
+        
+        // Once invisible (Phase 2 begins), snap the displacement back to 0 seamlessly
+        scatterDist *= (1.0 - step(0.001, scatterPhase2)); 
+        
+        finalPos += explosionDir * scatterDist;
 
         // --- Visibility Math ---
         float vis = 1.0;
         vis = mix(vis, 1.0 - step(0.10, aRandom), uMorphProgress);
         vis = mix(vis, 1.0 - step(0.08, aRandom), uFistProgress);
         
-        float finalVis = max(vis, uScatterForce);
+        // If an explosion is triggered, temporarily force all 50k particles to appear
+        float isScattering = step(0.001, uScatterForce);
+        vis = mix(vis, 1.0, isScattering);
+
+        // BUG FIX 3: Flash pure white-hot during the initial explosion burst for realism
+        float flashStrength = sin(scatterPhase1 * 3.14159);
+        vColor = mix(vColor, vec3(1.0, 1.0, 1.0), flashStrength * isScattering);
+        
+        // The Fade Curve: 1.0 -> 0.0 (Invisible at peak) -> 1.0 (Fade back in)
+        float scatterVis = abs(uScatterForce - 1.0);
+        vis *= scatterVis;
         
         float dimming = mix(1.0, fract(aRandom * 333.333) * 0.7 + 0.3, uFistProgress);
-        vVisibility = finalVis * dimming;
+        vVisibility = vis * dimming;
 
         vec4 mvPosition = modelViewMatrix * vec4(finalPos, 1.0);
         
@@ -105,9 +129,11 @@ export const vertexShader = `
         float currentSize = mix(idleSize, morphedSize, uMorphProgress);
         currentSize = mix(currentSize, nebulaSize, uFistProgress);
         
-        currentSize += uScatterForce * 15.0; 
+        // BUG FIX 4: Scale puff-up reasonably (40.0) but apply randomness so some debris is huge and some is tiny dust
+        float explosionPuff = sin(scatterPhase1 * 3.14159) * (40.0 * rand3 + 10.0); 
+        currentSize += explosionPuff * isScattering; 
         
-        gl_PointSize = currentSize * (2.0 / -mvPosition.z) * finalVis;
+        gl_PointSize = currentSize * (2.0 / -mvPosition.z) * vVisibility;
         gl_Position = projectionMatrix * mvPosition;
     }
 `;
