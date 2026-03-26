@@ -3,6 +3,7 @@ import * as THREE from 'three';
 export class WebGLScene {
     constructor() {
         this.scene = new THREE.Scene();
+        this.clock = new THREE.Clock(); // Add a clock to track time
         
         // 1. Camera setup (Field of View, Aspect Ratio, Near, Far)
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -24,6 +25,7 @@ export class WebGLScene {
         window.addEventListener('resize', () => this.onResize());
 
         this.isRunning = false;
+        this.onTick = null; // Callback for our main loop
     }
 
     onResize() {
@@ -35,6 +37,7 @@ export class WebGLScene {
     start() {
         if (!this.isRunning) {
             this.isRunning = true;
+            this.clock.start();
             this.tick();
         }
     }
@@ -42,6 +45,11 @@ export class WebGLScene {
     tick() {
         if (!this.isRunning) return;
         
+        // Pass the elapsed time to the callback
+        if (this.onTick) {
+            this.onTick(this.clock.getElapsedTime());
+        }
+
         // Render the scene from the perspective of the camera
         this.renderer.render(this.scene, this.camera);
         

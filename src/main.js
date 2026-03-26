@@ -11,6 +11,11 @@ const tracker = new HandTracker(videoElement);
 const scene = new WebGLScene();
 const particles = new ParticleSystem(scene.scene);
 
+// Connect the Scene's animation loop to the Particle System
+scene.onTick = (elapsedTime) => {
+    particles.update(elapsedTime);
+};
+
 async function bootApp() {
     statusElement.innerText = "Loading AI Model from local files...";
     const modelLoaded = await tracker.init();
