@@ -19,30 +19,35 @@ const vertexShader = `
         idlePos.z += sin(uTime * 0.4 + aRandom * 10.0) * 0.2;
 
         // STATE B: Target Shape (The Hand)
-        // FIX: Removed circular sweeping. Added rapid, tight, chaotic jitter.
-        // The small multiplier (0.04) acts as "padding" so they never cross the black lines!
+        // FIX: Removed dizzying jitter. Replaced with a very slow, tight "breathing" effect.
         vec3 targetPos = aTargetPosition;
-        targetPos.x += sin(uTime * 20.0 + aRandom * 100.0) * 0.04;
-        targetPos.y += cos(uTime * 17.3 + aRandom * 100.0) * 0.04;
-        targetPos.z += sin(uTime * 22.8 + aRandom * 100.0) * 0.04;
+        targetPos.x += sin(uTime * 1.0 + aRandom * 20.0) * 0.05;
+        targetPos.y += cos(uTime * 1.2 + aRandom * 20.0) * 0.05;
+        targetPos.z += sin(uTime * 0.8 + aRandom * 20.0) * 0.05;
 
         // THE MAGIC: Smoothly blend between State A and State B
         vec3 finalPos = mix(idlePos, targetPos, uMorphProgress);
 
-        // FIX: Target ~7,500 particles (15% of 50,000)
-        // If aRandom > 0.15, isExtra is 1.0 (meaning it will fade out).
-        float isExtra = step(0.15, aRandom);
+        // FIX: Target ~5,000 particles (10% of 50,000)
+        // If aRandom > 0.10, isExtra is 1.0 (meaning it will fade out).
+        float isExtra = step(0.10, aRandom);
         
-        // When morphed (uMorphProgress = 1.0), 85% of particles drop to 0.0 visibility.
+        // When morphed (uMorphProgress = 1.0), 90% of particles drop to 0.0 visibility.
         float visibility = 1.0 - (isExtra * uMorphProgress);
         vVisibility = visibility;
 
         vec4 mvPosition = modelViewMatrix * vec4(finalPos, 1.0);
         
-        // FIX: INCREASED SIZE & HIGH VARIABILITY. 
-        // Particles will now range randomly from 15px to 45px base size.
-        float baseSize = 30.0 * aRandom + 15.0;
-        gl_PointSize = baseSize * (2.0 / -mvPosition.z) * visibility;
+        // FIX: DYNAMIC SIZE SCALING
+        // Idle size: 5px to 15px (Small and elegant)
+        float idleSize = 10.0 * aRandom + 5.0;
+        // Morphed size: 15px to 45px (Large enough to fill the shape with only 5k particles)
+        float morphedSize = 30.0 * aRandom + 15.0;
+        
+        // Smoothly transition the size as the morph happens
+        float currentSize = mix(idleSize, morphedSize, uMorphProgress);
+        
+        gl_PointSize = currentSize * (2.0 / -mvPosition.z) * visibility;
         gl_Position = projectionMatrix * mvPosition;
     }
 `;
