@@ -41,6 +41,7 @@ async function bootApp() {
 
     // Keep track of state so we don't recalculate the hand map 60 times a second
     let isMorphed = false;
+    let lastGesture = "None"; // NEW: Tracks the previous frame's gesture
 
     tracker.onGestureDetected = (gestureName, landmarks) => {
         gestureOutputElement.innerText = gestureName;
@@ -62,9 +63,16 @@ async function bootApp() {
                 isMorphed = true;
             }
             
-            // Note: We REMOVED the continuous "if (gestureName === 'Thumb_Up' && isMorphed)" 
-            // block here because updating random pixel targets every frame scrambles the shape!
+            // NEW: The Combo Scatter Trigger!
+            // If the user was making a fist, and suddenly opens their hand... EXPLODE!
+            if (gestureName === "Open_Palm" && lastGesture === "Closed_Fist") {
+                particles.triggerScatter();
+                isMorphed = false; // Reset the morph state
+            }
         }
+        
+        // Record this gesture to check against in the next frame
+        lastGesture = gestureName;
     };
 }
 
