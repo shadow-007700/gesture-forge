@@ -19,10 +19,11 @@ const vertexShader = `
         idlePos.z += sin(uTime * 0.4 + aRandom * 10.0) * 0.2;
 
         // STATE B: Target Shape (The Hand)
+        // REDUCED amplitude (from 0.3 to 0.05) so particles stay strictly inside the boundary
         vec3 targetPos = aTargetPosition;
-        targetPos.x += sin(uTime * 2.0 + aRandom * 100.0) * 0.3;
-        targetPos.y += cos(uTime * 2.3 + aRandom * 100.0) * 0.3;
-        targetPos.z += sin(uTime * 1.8 + aRandom * 100.0) * 0.3;
+        targetPos.x += sin(uTime * 5.0 + aRandom * 100.0) * 0.05;
+        targetPos.y += cos(uTime * 5.3 + aRandom * 100.0) * 0.05;
+        targetPos.z += sin(uTime * 4.8 + aRandom * 100.0) * 0.05;
 
         // THE MAGIC: Smoothly blend between State A and State B
         vec3 finalPos = mix(idlePos, targetPos, uMorphProgress);
@@ -38,8 +39,9 @@ const vertexShader = `
 
         vec4 mvPosition = modelViewMatrix * vec4(finalPos, 1.0);
         
-        // Scale size down to 0 for extra particles as they morph
-        gl_PointSize = (15.0 * aRandom + 5.0) * (1.0 / -mvPosition.z) * visibility;
+        // INCREASED SIZE: Base size is now 20px to 60px, guaranteeing at least 8-24px on screen
+        float baseSize = 40.0 * aRandom + 20.0;
+        gl_PointSize = baseSize * (2.0 / -mvPosition.z) * visibility;
         gl_Position = projectionMatrix * mvPosition;
     }
 `;
@@ -84,11 +86,15 @@ export class ParticleSystem {
         canvas.height = 256;
         const ctx = canvas.getContext('2d');
         
-        // Draw a giant thumbs up in the center
-        ctx.font = '200px Arial';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('👍', 128, 128);
+        // Replace text emoji with a precise, hardcoded SVG Vector Path.
+        // This guarantees a perfect 2D silhouette on Windows, Mac, and Linux.
+        const thumbPath = new Path2D("M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z");
+        
+        ctx.fillStyle = 'white';
+        // Scale the 24x24 vector path to fit our 256x256 canvas
+        ctx.scale(10, 10);
+        ctx.translate(0.8, 1.2); // Center it in the canvas
+        ctx.fill(thumbPath);
 
         // Scan the pixels
         const imgData = ctx.getImageData(0, 0, 256, 256).data;
@@ -160,12 +166,14 @@ export class ParticleSystem {
             // Pick a random valid pixel inside our thumbs up boundary
             const point = this.thumbsUpPoints[Math.floor(Math.random() * this.thumbsUpPoints.length)];
 
-            // Scale it down to fit the screen properly (e.g., 5.0 instead of 20.0)
-            const scale = 5.0;
+            // Scale it down to fit the screen properly
+            const scale = 6.0;
             
             targetPositions[i3] = point.x * scale;
             targetPositions[i3 + 1] = point.y * scale;
-            targetPositions[i3 + 2] = (Math.random() - 0.5) * 1.5; // Give it slight 3D thickness
+            
+            // REDUCED Z-THICKNESS: Flatten the shape so it doesn't blur out into a blob
+            targetPositions[i3 + 2] = (Math.random() - 0.5) * 0.1; 
         }
         
         // Tell the GPU we updated the buffer!
