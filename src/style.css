@@ -13,17 +13,27 @@ body {
 
 .container {
     position: relative;
-    border-radius: 16px;
+    width: 100%;
+    height: 100%;
     overflow: hidden;
-    box-shadow: 0 20px 50px rgba(0,0,0,0.5);
 }
 
 #webcam {
     transform: scaleX(-1); /* Mirrors the webcam */
     display: block;
+    
+    /* Reposition to the bottom left corner */
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    width: 250px; /* Smaller monitor size */
     max-width: 90vw;
     max-height: 70vh;
     background-color: #1a1a1a;
+    border-radius: 12px;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    z-index: 10;
 }
 
 .ui-layer {

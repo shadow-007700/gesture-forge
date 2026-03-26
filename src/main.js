@@ -39,13 +39,33 @@ async function bootApp() {
         return;
     }
 
+    // Keep track of state so we don't recalculate the hand map 60 times a second
+    let isMorphed = false;
+
     tracker.onGestureDetected = (gestureName, landmarks) => {
         gestureOutputElement.innerText = gestureName;
         
         if (gestureName === "None") {
             gestureOutputElement.style.opacity = 0.3;
+            
+            // If they drop their hand, return to idle
+            if (isMorphed) {
+                particles.resetIdle();
+                isMorphed = false;
+            }
         } else {
             gestureOutputElement.style.opacity = 1.0;
+
+            // Trigger the Morph when a thumbs up is recognized!
+            if (gestureName === "Thumb_Up" && !isMorphed) {
+                particles.morphToHand(landmarks);
+                isMorphed = true;
+            }
+            
+            // If the hand is still up and moving, update the 3D position of the shape slightly
+            if (gestureName === "Thumb_Up" && isMorphed) {
+                particles.morphToHand(landmarks); 
+            }
         }
     };
 }
