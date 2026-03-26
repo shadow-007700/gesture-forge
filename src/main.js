@@ -56,16 +56,14 @@ async function bootApp() {
         } else {
             gestureOutputElement.style.opacity = 1.0;
 
-            // Trigger the Morph when a thumbs up is recognized!
+            // Trigger the Morph ONLY ONCE when a thumbs up is recognized!
             if (gestureName === "Thumb_Up" && !isMorphed) {
                 particles.morphToHand(landmarks);
                 isMorphed = true;
             }
             
-            // If the hand is still up and moving, update the 3D position of the shape slightly
-            if (gestureName === "Thumb_Up" && isMorphed) {
-                particles.morphToHand(landmarks); 
-            }
+            // Note: We REMOVED the continuous "if (gestureName === 'Thumb_Up' && isMorphed)" 
+            // block here because updating random pixel targets every frame scrambles the shape!
         }
     };
 }

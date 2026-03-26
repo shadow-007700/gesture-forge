@@ -19,28 +19,29 @@ const vertexShader = `
         idlePos.z += sin(uTime * 0.4 + aRandom * 10.0) * 0.2;
 
         // STATE B: Target Shape (The Hand)
-        // REDUCED amplitude (from 0.3 to 0.05) so particles stay strictly inside the boundary
+        // FIX: Removed circular sweeping. Added rapid, tight, chaotic jitter.
+        // The small multiplier (0.04) acts as "padding" so they never cross the black lines!
         vec3 targetPos = aTargetPosition;
-        targetPos.x += sin(uTime * 5.0 + aRandom * 100.0) * 0.05;
-        targetPos.y += cos(uTime * 5.3 + aRandom * 100.0) * 0.05;
-        targetPos.z += sin(uTime * 4.8 + aRandom * 100.0) * 0.05;
+        targetPos.x += sin(uTime * 20.0 + aRandom * 100.0) * 0.04;
+        targetPos.y += cos(uTime * 17.3 + aRandom * 100.0) * 0.04;
+        targetPos.z += sin(uTime * 22.8 + aRandom * 100.0) * 0.04;
 
         // THE MAGIC: Smoothly blend between State A and State B
         vec3 finalPos = mix(idlePos, targetPos, uMorphProgress);
 
-        // Determine if this particle should fade out.
-        // If aRandom > 0.2 (80% of particles), isExtra is 1.0. Else 0.0.
-        float isExtra = step(0.2, aRandom);
+        // FIX: Target ~7,500 particles (15% of 50,000)
+        // If aRandom > 0.15, isExtra is 1.0 (meaning it will fade out).
+        float isExtra = step(0.15, aRandom);
         
-        // When morphed (uMorphProgress = 1.0), 80% of particles drop to 0.0 visibility.
-        // This ensures a smooth transition from 50k to 10k particles.
+        // When morphed (uMorphProgress = 1.0), 85% of particles drop to 0.0 visibility.
         float visibility = 1.0 - (isExtra * uMorphProgress);
         vVisibility = visibility;
 
         vec4 mvPosition = modelViewMatrix * vec4(finalPos, 1.0);
         
-        // INCREASED SIZE: Base size is now 20px to 60px, guaranteeing at least 8-24px on screen
-        float baseSize = 40.0 * aRandom + 20.0;
+        // FIX: INCREASED SIZE & HIGH VARIABILITY. 
+        // Particles will now range randomly from 15px to 45px base size.
+        float baseSize = 30.0 * aRandom + 15.0;
         gl_PointSize = baseSize * (2.0 / -mvPosition.z) * visibility;
         gl_Position = projectionMatrix * mvPosition;
     }
@@ -73,46 +74,63 @@ export class ParticleSystem {
             uMorphProgress: { value: 0.0 } // 0 = idle, 1 = hand shape
         };
         this.targetMorph = 0.0; // What we want to lerp towards
-        this.thumbsUpPoints = []; // Will hold the boundary pixel coordinates
+        
+        // Provide a fallback coordinate in case the image takes a moment to load
+        this.thumbsUpPoints = [{x: 0, y: 0}]; 
         
         this.createShapeData();
         this.init();
     }
 
-    // New Method: Extract pixel coordinates from an emoji
+    // New Method: Extract pixel coordinates from your custom uploaded image
     createShapeData() {
-        const canvas = document.createElement('canvas');
-        canvas.width = 256;
-        canvas.height = 256;
-        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        // Updated to industry standard: expects image in public/images/ folder
+        img.src = '/images/thumbs_up.png'; 
         
-        // Replace text emoji with a precise, hardcoded SVG Vector Path.
-        // This guarantees a perfect 2D silhouette on Windows, Mac, and Linux.
-        const thumbPath = new Path2D("M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z");
-        
-        ctx.fillStyle = 'white';
-        // Scale the 24x24 vector path to fit our 256x256 canvas
-        ctx.scale(10, 10);
-        ctx.translate(0.8, 1.2); // Center it in the canvas
-        ctx.fill(thumbPath);
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            
+            // FIX: Calculate scale to preserve aspect ratio (This restores the missing finger!)
+            const scale = Math.min(256 / img.width, 256 / img.height);
+            const w = img.width * scale;
+            const h = img.height * scale;
+            const offsetX = (256 - w) / 2;
+            const offsetY = (256 - h) / 2;
+            
+            // Draw your custom image perfectly centered without stretching
+            ctx.drawImage(img, offsetX, offsetY, w, h);
 
-        // Scan the pixels
-        const imgData = ctx.getImageData(0, 0, 256, 256).data;
+            // Scan the pixels
+            const imgData = ctx.getImageData(0, 0, 256, 256).data;
+            
+            // Clear the fallback point
+            this.thumbsUpPoints = []; 
 
-        for (let y = 0; y < 256; y++) {
-            for (let x = 0; x < 256; x++) {
-                // Check the Alpha (transparency) channel of the pixel
-                const alpha = imgData[(y * 256 + x) * 4 + 3];
-                
-                // If the pixel is not transparent, it's inside our boundary!
-                if (alpha > 128) {
-                    this.thumbsUpPoints.push({
-                        x: (x / 256) - 0.5,       // Normalize to -0.5 to 0.5
-                        y: -(y / 256) + 0.5       // Invert Y for 3D coordinates
-                    });
+            for (let y = 0; y < 256; y++) {
+                for (let x = 0; x < 256; x++) {
+                    const index = (y * 256 + x) * 4;
+                    const r = imgData[index];
+                    const g = imgData[index + 1];
+                    const b = imgData[index + 2];
+                    const alpha = imgData[index + 3];
+                    
+                    // CRITICAL LOGIC: 
+                    // This expects the INSIDE of the hand to be filled with color (not transparent)
+                    if (alpha > 128 && (r > 50 || g > 50 || b > 50)) {
+                        this.thumbsUpPoints.push({
+                            x: (x / 256) - 0.5,
+                            y: -(y / 256) + 0.5
+                        });
+                    }
                 }
             }
-        }
+            
+            console.log("Custom Shape loaded! Target points generated:", this.thumbsUpPoints.length);
+        };
     }
 
     init() {
@@ -158,6 +176,9 @@ export class ParticleSystem {
     morphToHand(landmarks) {
         this.targetMorph = 1.0; // Trigger the slider to go to 1.0
 
+        // If the image hasn't finished loading yet, skip morphing this frame
+        if (this.thumbsUpPoints.length <= 1) return;
+
         const targetPositions = this.geometry.attributes.aTargetPosition.array;
         
         for (let i = 0; i < this.particleCount; i++) {
@@ -166,8 +187,8 @@ export class ParticleSystem {
             // Pick a random valid pixel inside our thumbs up boundary
             const point = this.thumbsUpPoints[Math.floor(Math.random() * this.thumbsUpPoints.length)];
 
-            // Scale it down to fit the screen properly
-            const scale = 6.0;
+            // Adjusted scale to ensure the image fits well on the screen
+            const scale = 8.0;
             
             targetPositions[i3] = point.x * scale;
             targetPositions[i3 + 1] = point.y * scale;
