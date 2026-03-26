@@ -28,13 +28,30 @@ const vertexShader = `
         // Blends to Thumbs Up
         vec3 finalPos = mix(idlePos, targetPos, uMorphProgress);
 
-        // STATE C: THE FIST NEBULA
-        // Creates a dense, rapidly swirling cluster of all 50k particles
-        vec3 nebulaPos = vec3(
-            sin(uTime * 3.0 + aRandom * 100.0) * (aRandom * 4.0),
-            cos(uTime * 2.5 + aRandom * 100.0) * (aRandom * 4.0),
-            sin(uTime * 3.5 + aRandom * 100.0) * (aRandom * 4.0)
+        // STATE C: THE FIST NEBULA (Organic Dust Cloud)
+        // 1. Organic Clumping: Break the perfect sphere for a natural look
+        float nRadius = pow(aRandom, 0.4) * 10.0; // Wider base spread
+        float nTheta = fract(aRandom * 123.456) * 6.28318;
+        float nPhi = acos(2.0 * fract(aRandom * 789.123) - 1.0);
+
+        // Add turbulence to the radius to create cloudy "arms"
+        nRadius += sin(nTheta * 4.0) * 2.0;
+        nRadius += sin(nPhi * 3.0) * 1.5;
+
+        vec3 cloudPos = vec3(
+            nRadius * sin(nPhi) * cos(nTheta),
+            nRadius * sin(nPhi) * sin(nTheta) * 0.25, // Flatter disk
+            nRadius * cos(nPhi)
         );
+
+        // Slowly rotate and add gentle drift
+        float rot = uTime * 0.2;
+        vec3 nebulaPos = vec3(
+            cloudPos.x * cos(rot) - cloudPos.z * sin(rot),
+            cloudPos.y + sin(uTime * 1.5 + aRandom * 10.0) * 0.2,
+            cloudPos.x * sin(rot) + cloudPos.z * cos(rot)
+        );
+
         // Blends the current state into the Nebula cluster
         finalPos = mix(finalPos, nebulaPos, uFistProgress);
 
@@ -50,26 +67,40 @@ const vertexShader = `
         
         finalPos += explosionDir * (uScatterForce * 40.0);
 
-        // Visibility Math
-        float isExtra = step(0.10, aRandom);
-        float visibility = 1.0 - (isExtra * uMorphProgress);
+        // --- Visibility Math ---
+        float vis = 1.0;
+        // Thumbs Up: Fade down to ~10% of particles (5k)
+        vis = mix(vis, 1.0 - step(0.10, aRandom), uMorphProgress);
         
-        // Force ALL particles to become instantly visible during explosion and fist!
-        visibility = max(visibility, uScatterForce);
-        visibility = max(visibility, uFistProgress); 
-        vVisibility = visibility;
+        // Nebula FIX: Fade down to ~4% of particles (2k). Removes the solid blob look!
+        vis = mix(vis, 1.0 - step(0.04, aRandom), uFistProgress);
+        
+        // Explosion: Flash ALL particles to 100% visibility for maximum impact
+        float finalVis = max(vis, uScatterForce);
+        
+        // Add a random dimming effect so the nebula isn't uniformly bright
+        float dimming = mix(1.0, fract(aRandom * 333.333) * 0.6 + 0.4, uFistProgress);
+        vVisibility = finalVis * dimming;
 
         vec4 mvPosition = modelViewMatrix * vec4(finalPos, 1.0);
         
+        // --- Dynamic Size Scaling ---
         float idleSize = 10.0 * aRandom + 5.0;
         float morphedSize = 30.0 * aRandom + 15.0;
         
+        // Nebula FIX: Power Curve! 
+        // 90% of particles become tiny "stars" (3px)
+        // 10% become massive glowing "gas clouds" (up to 80px)
+        float randomGas = fract(aRandom * 555.555);
+        float nebulaSize = 80.0 * pow(randomGas, 6.0) + 3.0; 
+        
         float currentSize = mix(idleSize, morphedSize, uMorphProgress);
+        currentSize = mix(currentSize, nebulaSize, uFistProgress);
         
         // Ensure particles get slightly larger during the explosion so it feels thick
         currentSize += uScatterForce * 15.0; 
         
-        gl_PointSize = currentSize * (2.0 / -mvPosition.z) * visibility;
+        gl_PointSize = currentSize * (2.0 / -mvPosition.z) * finalVis;
         gl_Position = projectionMatrix * mvPosition;
     }
 `;
