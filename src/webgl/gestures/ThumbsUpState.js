@@ -54,11 +54,16 @@ export class ThumbsUpState {
         for (let i = 0; i < this.system.particleCount; i++) {
             const i3 = i * 3;
             const point = this.points[Math.floor(Math.random() * this.points.length)];
-            const scale = 8.0;
+            
+            // BUG FIX: Scaled up the shape from 8.0 to 32.0 so it is much larger and more legible
+            const scale = 32.0;
 
             targetPositions[i3] = point.x * scale;
             targetPositions[i3 + 1] = point.y * scale;
-            targetPositions[i3 + 2] = (Math.random() - 0.5) * 0.1;
+            
+            // BUG FIX: Added 3D depth (from 0.1 to 2.0) so the particles don't sit perfectly flat.
+            // This also helps solve the "solid blob" issue by distributing the glow across the Z-axis!
+            targetPositions[i3 + 2] = (Math.random() - 0.5) * 2.0;
         }
 
         this.system.geometry.attributes.aTargetPosition.needsUpdate = true;
@@ -70,6 +75,7 @@ export class ThumbsUpState {
 
     update() {
         const target = this.isActive ? 1.0 : 0.0;
-        this.system.uniforms.uMorphProgress.value += (target - this.system.uniforms.uMorphProgress.value) * 0.05;
+        // BUG FIX: Synced the speed with NebulaState (changed from 0.03 to 0.06)
+        this.system.uniforms.uMorphProgress.value += (target - this.system.uniforms.uMorphProgress.value) * 0.06;
     }
 }

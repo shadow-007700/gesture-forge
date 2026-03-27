@@ -14,6 +14,8 @@ export class NebulaState {
 
     update() {
         const target = this.isActive ? 1.0 : 0.0;
-        this.system.uniforms.uFistProgress.value += (target - this.system.uniforms.uFistProgress.value) * 0.1;
+        // BUG FIX: Increased speed from 0.03 to 0.06 to make the transition snappier, 
+        // resolving the sluggish feeling while keeping the fade smooth.
+        this.system.uniforms.uFistProgress.value += (target - this.system.uniforms.uFistProgress.value) * 0.06;
     }
 }
