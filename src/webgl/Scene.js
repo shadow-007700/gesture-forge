@@ -1,59 +1,69 @@
 import * as THREE from 'three';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { VFXController } from './VFXController.js';
 
 export class WebGLScene {
     constructor() {
         this.scene = new THREE.Scene();
-        this.clock = new THREE.Clock(); // Add a clock to track time
         
-        // 1. Camera setup (Field of View, Aspect Ratio, Near, Far)
-        this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        this.camera.position.z = 5;
+        // Push the camera back slightly so the explosion has room to fly towards us
+        this.camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        this.camera.position.z = 45; 
 
-        // 2. Renderer setup
         this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Optimization for high DPI screens
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         
-        // 3. Add canvas to the DOM, pushing it to the background
-        this.renderer.domElement.style.position = 'absolute';
-        this.renderer.domElement.style.top = '0';
-        this.renderer.domElement.style.left = '0';
-        this.renderer.domElement.style.zIndex = '-1'; // Push behind webcam and UI
+        // Essential for vibrant, glowing colors
+        this.renderer.toneMapping = THREE.ACESFilmicToneMapping; 
+        this.renderer.toneMappingExposure = 1.2;
+        
         document.body.appendChild(this.renderer.domElement);
 
-        // Handle window resizing seamlessly
-        window.addEventListener('resize', () => this.onResize());
+        // --- POST-PROCESSING PIPELINE ---
+        this.composer = new EffectComposer(this.renderer);
+        
+        // 1. Render the base 3D scene
+        const renderPass = new RenderPass(this.scene, this.camera);
+        this.composer.addPass(renderPass);
 
-        this.isRunning = false;
-        this.onTick = null; // Callback for our main loop
+        // 2. Add the Unreal Bloom (Cinematic Glow)
+        // Parameters: Resolution, Strength, Radius, Threshold
+        this.bloomPass = new UnrealBloomPass(
+            new THREE.Vector2(window.innerWidth, window.innerHeight),
+            1.2,  // Glow Strength 
+            0.5,  // Glow Radius (How far it bleeds)
+            0.15  // Threshold (Only glow bright things)
+        );
+        this.composer.addPass(this.bloomPass);
+
+        this.clock = new THREE.Clock();
+        this.onTick = () => {};
+
+        // FIX: Replaced hardcoded GUI logic with our new modular VFX Controller
+        this.vfxController = new VFXController(this.renderer, this.bloomPass);
+
+        window.addEventListener('resize', this.onWindowResize.bind(this));
     }
 
-    onResize() {
+    onWindowResize() {
         this.camera.aspect = window.innerWidth / window.innerHeight;
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.composer.setSize(window.innerWidth, window.innerHeight);
     }
 
     start() {
-        if (!this.isRunning) {
-            this.isRunning = true;
-            this.clock.start();
-            this.tick();
-        }
-    }
-
-    tick() {
-        if (!this.isRunning) return;
-        
-        // Pass the elapsed time to the callback
-        if (this.onTick) {
-            this.onTick(this.clock.getElapsedTime());
-        }
-
-        // Render the scene from the perspective of the camera
-        this.renderer.render(this.scene, this.camera);
-        
-        // Loop on the next frame
-        requestAnimationFrame(() => this.tick());
+        this.renderer.setAnimationLoop(() => {
+            const elapsedTime = this.clock.getElapsedTime();
+            
+            // Tell the particles to update their physics
+            this.onTick(elapsedTime);
+            
+            // CRITICAL: Render through the Composer (Bloom), not the standard Renderer!
+            this.composer.render(); 
+        });
     }
 }

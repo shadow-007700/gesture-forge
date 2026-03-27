@@ -33,9 +33,16 @@ export class ParticleSystem {
         
         for (let i = 0; i < this.particleCount; i++) {
             const i3 = i * 3;
-            positions[i3] = (Math.random() - 0.5) * 15;
-            positions[i3 + 1] = (Math.random() - 0.5) * 15;
-            positions[i3 + 2] = (Math.random() - 0.5) * 15;
+            
+            // BUG FIX: Spread particles into a massive ambient sphere instead of a rigid box!
+            // This pushes the idle particles deep into the background so they look like cosmic dust.
+            const radius = 20.0 + Math.random() * 50.0; 
+            const theta = Math.random() * Math.PI * 2;
+            const phi = Math.acos(2.0 * Math.random() - 1.0);
+            
+            positions[i3] = radius * Math.sin(phi) * Math.cos(theta);
+            positions[i3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
+            positions[i3 + 2] = radius * Math.cos(phi);
             
             targetPositions[i3] = positions[i3];
             targetPositions[i3 + 1] = positions[i3 + 1];
