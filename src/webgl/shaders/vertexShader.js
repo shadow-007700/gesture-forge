@@ -4,11 +4,16 @@ export const vertexShader = `
     uniform float uScatterForce; 
     uniform float uFistProgress; 
     
-    // NEW: Receive Dynamic Colors
     uniform vec3 uColorIdle;
     uniform vec3 uColorThumbsUp;
     uniform vec3 uColorNebulaCore;
     uniform vec3 uColorNebulaEdge;
+    
+    // NEW: Receive Physics Uniforms
+    uniform float uNebulaRadius;
+    uniform float uThumbBuzz;
+    uniform float uThumbMaxSize;
+    uniform float uThumbBaseSize;
     
     attribute float aRandom;
     attribute vec3 aTargetPosition;
@@ -16,13 +21,11 @@ export const vertexShader = `
     varying float vVisibility;
     varying vec3 vColor;
     
-    // NEW: Fixed Neon Booster Function
     vec3 boostNeon(vec3 color) {
         float lum = dot(color, vec3(0.299, 0.587, 0.114));
         float isBlack = step(lum, 0.001);
         vec3 safeColor = mix(color, vec3(1.0), isBlack);
         
-        // The fix: smoothstep parameters must be ordered small to large!
         float boostFactor = (1.0 - smoothstep(0.0, 0.4, lum)) * 2.5 + 1.0; 
         return safeColor * boostFactor;
     }
@@ -37,11 +40,11 @@ export const vertexShader = `
         // STATE B: Target Shape (The Hand)
         vec3 targetPos = aTargetPosition;
         
-        targetPos.x += sin(uTime * 3.0 + aRandom * 100.0) * 0.15;
-        targetPos.y += cos(uTime * 3.3 + aRandom * 100.0) * 0.15;
-        targetPos.z += sin(uTime * 2.8 + aRandom * 100.0) * 0.15;
+        // REPLACED: 0.15 is now uThumbBuzz
+        targetPos.x += sin(uTime * 3.0 + aRandom * 100.0) * uThumbBuzz;
+        targetPos.y += cos(uTime * 3.3 + aRandom * 100.0) * uThumbBuzz;
+        targetPos.z += sin(uTime * 2.8 + aRandom * 100.0) * uThumbBuzz;
 
-        // Blends to Thumbs Up
         vec3 finalPos = mix(idlePos, targetPos, uMorphProgress);
 
         // --- TRUE CHAOS RANDOMNESS ---
@@ -50,7 +53,8 @@ export const vertexShader = `
         float rand3 = fract(sin(aRandom * 39.3460) * 43758.5453);
 
         // STATE C: THE FIST NEBULA (Volumetric Swirl)
-        float nRadius = pow(rand1, 2.5) * 26.0; 
+        // REPLACED: 26.0 is now uNebulaRadius
+        float nRadius = pow(rand1, 2.5) * uNebulaRadius; 
         float nTheta = rand2 * 6.28318; 
         float nPhi = acos(2.0 * rand3 - 1.0); 
 
@@ -78,7 +82,7 @@ export const vertexShader = `
 
         finalPos = mix(finalPos, nebulaPos, uFistProgress);
 
-        // --- NEW: DYNAMIC IONIZED COLORING ---
+        // --- DYNAMIC IONIZED COLORING ---
         vec3 cIdle = boostNeon(uColorIdle);
         vec3 cThumb = boostNeon(uColorThumbsUp);
         vec3 cNebCore = boostNeon(uColorNebulaCore);
@@ -133,8 +137,9 @@ export const vertexShader = `
         // --- Dynamic Size Scaling ---
         float idleSize = 10.0 * aRandom + 5.0;
         
+        // REPLACED: 16.0 and 0.8 are now uniforms
         float thumbRandom = fract(aRandom * 888.888);
-        float morphedSize = 16.0 * pow(thumbRandom, 5.0) + 0.8; 
+        float morphedSize = uThumbMaxSize * pow(thumbRandom, 5.0) + uThumbBaseSize; 
         
         float randomGas = fract(aRandom * 555.555);
         float nebulaSize = 40.0 * pow(randomGas, 3.0) + 2.0; 

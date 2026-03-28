@@ -15,16 +15,21 @@ export class ParticleSystem {
             uScatterForce: { value: 0.0 },
             uFistProgress: { value: 0.0 },
             
-            // NEW: Register Dynamic Color Uniforms
+            // Dynamic Color Uniforms
             uColorIdle: { value: new THREE.Color('#00ff88') },
             uColorThumbsUp: { value: new THREE.Color('#00ffff') },
             uColorNebulaCore: { value: new THREE.Color('#19ccff') },
-            uColorNebulaEdge: { value: new THREE.Color('#cc1999') }
+            uColorNebulaEdge: { value: new THREE.Color('#cc1999') },
+            
+            // NEW: Physics Engine Uniforms
+            uNebulaRadius: { value: 26.0 },
+            uThumbBuzz: { value: 0.15 },
+            uThumbMaxSize: { value: 16.0 },
+            uThumbBaseSize: { value: 0.8 }
         };
 
         this.init();
 
-        // Register Gesture Controllers
         this.thumbsUpState = new ThumbsUpState(this);
         this.nebulaState = new NebulaState(this);
         this.scatterState = new ScatterState(this);
@@ -40,7 +45,6 @@ export class ParticleSystem {
         for (let i = 0; i < this.particleCount; i++) {
             const i3 = i * 3;
             
-            // Restored your ambient sphere spread logic!
             const radius = 20.0 + Math.random() * 50.0; 
             const theta = Math.random() * Math.PI * 2;
             const phi = Math.acos(2.0 * Math.random() - 1.0);
