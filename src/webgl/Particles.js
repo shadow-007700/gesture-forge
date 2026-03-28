@@ -13,7 +13,13 @@ export class ParticleSystem {
             uTime: { value: 0.0 },
             uMorphProgress: { value: 0.0 },
             uScatterForce: { value: 0.0 },
-            uFistProgress: { value: 0.0 }
+            uFistProgress: { value: 0.0 },
+            
+            // NEW: Register Dynamic Color Uniforms
+            uColorIdle: { value: new THREE.Color('#00ff88') },
+            uColorThumbsUp: { value: new THREE.Color('#00ffff') },
+            uColorNebulaCore: { value: new THREE.Color('#19ccff') },
+            uColorNebulaEdge: { value: new THREE.Color('#cc1999') }
         };
 
         this.init();
@@ -34,8 +40,7 @@ export class ParticleSystem {
         for (let i = 0; i < this.particleCount; i++) {
             const i3 = i * 3;
             
-            // BUG FIX: Spread particles into a massive ambient sphere instead of a rigid box!
-            // This pushes the idle particles deep into the background so they look like cosmic dust.
+            // Restored your ambient sphere spread logic!
             const radius = 20.0 + Math.random() * 50.0; 
             const theta = Math.random() * Math.PI * 2;
             const phi = Math.acos(2.0 * Math.random() - 1.0);
@@ -68,7 +73,6 @@ export class ParticleSystem {
         this.scene.add(this.points);
     }
 
-    // Public API for main.js
     morphToHand(landmarks) {
         this.nebulaState.release();
         this.thumbsUpState.trigger();
@@ -93,7 +97,6 @@ export class ParticleSystem {
     update(elapsedTime) {
         this.uniforms.uTime.value = elapsedTime;
 
-        // Delegate updates to state controllers
         this.thumbsUpState.update();
         this.nebulaState.update();
         this.scatterState.update();

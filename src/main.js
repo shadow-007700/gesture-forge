@@ -12,6 +12,11 @@ async function bootApp() {
     const webgl = new WebGLScene();
     const particles = new ParticleSystem(webgl.scene);
 
+    // NEW: Connect the VFX Controller to the particles for Dynamic Colors
+    if (webgl.vfxController) {
+        webgl.vfxController.setParticles(particles);
+    }
+
     webgl.onTick = (elapsedTime) => {
         particles.update(elapsedTime);
     };
@@ -34,7 +39,7 @@ async function bootApp() {
         return;
     }
 
-    // Keep track of state outside the loop
+    // Keep track of state outside the loop (Restored your custom combo logic!)
     let isMorphed = false;
     let lastFistTime = 0;
 
@@ -65,8 +70,7 @@ async function bootApp() {
                 }
             }
             else {
-                // BUG FIX: Catch-all for Pointing_Up, ILoveYou, or Open_Palm (no combo).
-                // This guarantees the nebula never gets "stuck"
+                // Catch-all for Pointing_Up, ILoveYou, or Open_Palm (no combo).
                 particles.resetIdle();
                 isMorphed = false;
             }

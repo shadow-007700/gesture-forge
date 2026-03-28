@@ -4,11 +4,28 @@ export const vertexShader = `
     uniform float uScatterForce; 
     uniform float uFistProgress; 
     
+    // NEW: Receive Dynamic Colors
+    uniform vec3 uColorIdle;
+    uniform vec3 uColorThumbsUp;
+    uniform vec3 uColorNebulaCore;
+    uniform vec3 uColorNebulaEdge;
+    
     attribute float aRandom;
     attribute vec3 aTargetPosition;
     
     varying float vVisibility;
     varying vec3 vColor;
+    
+    // NEW: Fixed Neon Booster Function
+    vec3 boostNeon(vec3 color) {
+        float lum = dot(color, vec3(0.299, 0.587, 0.114));
+        float isBlack = step(lum, 0.001);
+        vec3 safeColor = mix(color, vec3(1.0), isBlack);
+        
+        // The fix: smoothstep parameters must be ordered small to large!
+        float boostFactor = (1.0 - smoothstep(0.0, 0.4, lum)) * 2.5 + 1.0; 
+        return safeColor * boostFactor;
+    }
     
     void main() {
         // STATE A: Idle floating
@@ -20,8 +37,6 @@ export const vertexShader = `
         // STATE B: Target Shape (The Hand)
         vec3 targetPos = aTargetPosition;
         
-        // TWEAK 1: Tightened the "Contained Buzz" radius (from 0.35 down to 0.15).
-        // They will still vibrate with high energy, but they won't swing past the invisible boundary walls!
         targetPos.x += sin(uTime * 3.0 + aRandom * 100.0) * 0.15;
         targetPos.y += cos(uTime * 3.3 + aRandom * 100.0) * 0.15;
         targetPos.z += sin(uTime * 2.8 + aRandom * 100.0) * 0.15;
@@ -63,13 +78,16 @@ export const vertexShader = `
 
         finalPos = mix(finalPos, nebulaPos, uFistProgress);
 
-        // --- DYNAMIC IONIZED COLORING ---
-        vec3 baseColor = vec3(0.0, 1.0, 0.5); 
+        // --- NEW: DYNAMIC IONIZED COLORING ---
+        vec3 cIdle = boostNeon(uColorIdle);
+        vec3 cThumb = boostNeon(uColorThumbsUp);
+        vec3 cNebCore = boostNeon(uColorNebulaCore);
+        vec3 cNebEdge = boostNeon(uColorNebulaEdge);
+
+        vec3 baseColor = mix(cIdle, cThumb, uMorphProgress); 
         
         float colorMix = clamp(distToCenter / 12.0, 0.0, 1.0);
-        vec3 coreColor = vec3(0.1, 0.8, 1.0); 
-        vec3 edgeColor = vec3(0.8, 0.1, 0.6); 
-        vec3 nebulaColor = mix(coreColor, edgeColor, colorMix);
+        vec3 nebulaColor = mix(cNebCore, cNebEdge, colorMix);
         
         float isStar = step(0.97, rand1);
         nebulaColor = mix(nebulaColor, vec3(1.0, 1.0, 1.0), isStar);
@@ -95,10 +113,7 @@ export const vertexShader = `
         // --- Visibility Math ---
         float vis = 1.0;
         
-        // TWEAK 2: Increased particle count to 18% (approx 9,000 points).
-        // Since we are adding more negative space (padding) with smaller base sizes, we can pack more stars in!
         vis = mix(vis, 1.0 - step(0.18, aRandom), uMorphProgress);
-        
         vis = mix(vis, 1.0 - step(0.08, aRandom), uFistProgress);
         
         float isScattering = step(0.001, uScatterForce);
@@ -118,8 +133,6 @@ export const vertexShader = `
         // --- Dynamic Size Scaling ---
         float idleSize = 10.0 * aRandom + 5.0;
         
-        // TWEAK 3: Kept your 16.0 max size, but lowered the base size to 0.8 and steepened the curve (pow 5.0).
-        // This makes the vast majority of points microscopic, creating massive "padding" between the few larger orbs.
         float thumbRandom = fract(aRandom * 888.888);
         float morphedSize = 16.0 * pow(thumbRandom, 5.0) + 0.8; 
         
