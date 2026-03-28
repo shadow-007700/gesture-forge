@@ -33,8 +33,13 @@ void main() {
     idlePos.y += cos(uTime * 0.3 + aRandom * 10.0) * 1.5;
     idlePos.z += sin(uTime * 0.4 + aRandom * 10.0) * 1.5;
 
+    // --- TRUE CHAOS RANDOMNESS ---
+    // (Moved up so we can use these values for fluid turbulence!)
+    float rand1 = fract(sin(aRandom * 12.9898) * 43758.5453);
+    float rand2 = fract(sin(aRandom * 78.2330) * 43758.5453);
+    float rand3 = fract(sin(aRandom * 39.3460) * 43758.5453);
+
     // --- THE MAGNETIC GHOST HAND CALCULATION ---
-    // We calculate the physical 3D position of BOTH hands every frame, even if they aren't on screen!
     vec3 baseShape = aTargetPosition;
     
     // 1. LEFT HAND GHOST (Pos A)
@@ -60,12 +65,10 @@ void main() {
     // 3. DYNAMIC STAGE FRAMING
     float dualFactor = uThumbActive.x * uThumbActive.y; 
     
-    // UPGRADED: Hands stay at 90% scale when both are on screen, making them much bigger!
     float scaleMulti = mix(1.0, 0.9, dualFactor); 
     posLeft *= scaleMulti;
     posRight *= scaleMulti;
     
-    // Push them apart only if BOTH hands are active
     posLeft.x += mix(0.0, -15.0, dualFactor);
     posRight.x += mix(0.0, 15.0, dualFactor);
     
@@ -78,23 +81,28 @@ void main() {
     posLeft += buzz;
     posRight += buzz;
 
-    // --- THE MAGNETIC PULL (Target Interpolation) ---
-    // If Team Left's hand is missing, it magnetically targets the Right hand (and vice versa).
-    // As the missing hand fades in, the particles physically fly across the screen to build it!
-    vec3 myTargetPos = mix(
-        mix(posRight, posLeft, uThumbActive.x), // If I am Team 0.0 (Left Team): Prefer Left, fall back to Right
-        mix(posLeft, posRight, uThumbActive.y), // If I am Team 1.0 (Right Team): Prefer Right, fall back to Left
-        aTeam
+    // --- THE FLUID LEAK TRANSITION ---
+    // We calculate a gravitational turbulence that only applies during the middle of a transition.
+    vec3 fluidGravity = vec3(
+        sin(uTime * 4.0 + aRandom * 50.0) * (20.0 * rand1), // X-axis splashing
+        -50.0 * rand2 - 10.0,                               // Y-axis heavy gravity drag
+        cos(uTime * 4.0 + rand3 * 50.0) * (20.0 * rand1)    // Z-axis splashing
     );
+
+    // sin(active * PI) creates a perfect 0 -> 1 -> 0 curve. 
+    // We raise it to pow 0.6 to make the "leaky" feeling last slightly longer!
+    float leakLeft = pow(sin(uThumbActive.x * 3.14159), 0.6); 
+    float leakRight = pow(sin(uThumbActive.y * 3.14159), 0.6);
+
+    vec3 targetLeft = mix(posRight, posLeft, uThumbActive.x) + (fluidGravity * leakLeft);
+    vec3 targetRight = mix(posLeft, posRight, uThumbActive.y) + (fluidGravity * leakRight);
+
+    // Apply the team logic
+    vec3 myTargetPos = mix(targetLeft, targetRight, aTeam);
     
     // We only go to idle if NO hands are on screen.
     float anyHandActive = max(uThumbActive.x, uThumbActive.y);
     vec3 finalPos = mix(idlePos, myTargetPos, anyHandActive);
-
-    // --- TRUE CHAOS RANDOMNESS ---
-    float rand1 = fract(sin(aRandom * 12.9898) * 43758.5453);
-    float rand2 = fract(sin(aRandom * 78.2330) * 43758.5453);
-    float rand3 = fract(sin(aRandom * 39.3460) * 43758.5453);
 
     // STATE C: THE FIST NEBULA (Volumetric Swirl)
     float nRadius = pow(rand1, 2.5) * uNebulaRadius; 
