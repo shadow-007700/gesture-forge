@@ -6,6 +6,7 @@ export class HandTracker {
         this.recognizer = null;
         this.lastVideoTime = -1;
         this.currentGesture = "None";
+        this.handedness = "None"; // NEW: Track Left/Right hand
         this.landmarks = [];
         this.onGestureDetected = null; 
     }
@@ -18,7 +19,6 @@ export class HandTracker {
 
             this.recognizer = await GestureRecognizer.createFromOptions(vision, {
                 baseOptions: {
-                    // Points to the model you downloaded into public/models
                     modelAssetPath: "/models/gesture_recognizer.task", 
                     delegate: "GPU" 
                 },
@@ -59,13 +59,20 @@ export class HandTracker {
             if (results.gestures.length > 0) {
                 this.currentGesture = results.gestures[0][0].categoryName;
                 this.landmarks = results.landmarks[0]; 
+                
+                // NEW: Extract which hand the user is holding up
+                if (results.handednesses && results.handednesses.length > 0) {
+                    this.handedness = results.handednesses[0][0].categoryName; 
+                }
             } else {
                 this.currentGesture = "None";
+                this.handedness = "None";
                 this.landmarks = [];
             }
 
             if (this.onGestureDetected) {
-                this.onGestureDetected(this.currentGesture, this.landmarks);
+                // NEW: Pass handedness to our application loop
+                this.onGestureDetected(this.currentGesture, this.landmarks, this.handedness);
             }
         }
         

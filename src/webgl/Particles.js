@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import vertexShader from './shaders/vertex.glsl';
 import fragmentShader from './shaders/fragment.glsl';
-import { ThumbsUpState } from './gestures/ThumbsUpState.js';
+import { ThumbState } from './gestures/ThumbState.js';
 import { NebulaState } from './gestures/NebulaState.js';
 import { ScatterState } from './gestures/ScatterState.js';
 
@@ -21,16 +21,21 @@ export class ParticleSystem {
             uColorNebulaCore: { value: new THREE.Color('#19ccff') },
             uColorNebulaEdge: { value: new THREE.Color('#cc1999') },
             
-            // NEW: Physics Engine Uniforms
+            // Physics Engine Uniforms
             uNebulaRadius: { value: 26.0 },
             uThumbBuzz: { value: 0.15 },
             uThumbMaxSize: { value: 16.0 },
-            uThumbBaseSize: { value: 0.8 }
+            uThumbBaseSize: { value: 0.8 },
+            
+            // NEW: Hardware Transformation Uniforms
+            uThumbMirror: { value: 1.0 },    // 1.0 (Right) or -1.0 (Left)
+            uThumbRotation: { value: 0.0 }   // 0 (Up) or 3.14159 (Down)
         };
 
         this.init();
 
-        this.thumbsUpState = new ThumbsUpState(this);
+        // Register Gesture Controllers
+        this.thumbState = new ThumbState(this);
         this.nebulaState = new NebulaState(this);
         this.scatterState = new ScatterState(this);
     }
@@ -77,31 +82,33 @@ export class ParticleSystem {
         this.scene.add(this.points);
     }
 
-    morphToHand(landmarks) {
+    // NEW: Accept config from the Combo Manager
+    morphToHand(config, landmarks) {
         this.nebulaState.release();
-        this.thumbsUpState.trigger();
+        this.thumbState.trigger(config);
     }
 
     morphToFist() {
-        this.thumbsUpState.release();
+        this.thumbState.release();
         this.nebulaState.trigger();
     }
 
     triggerScatter() {
-        this.thumbsUpState.release();
+        this.thumbState.release();
         this.nebulaState.release();
         this.scatterState.trigger();
     }
 
     resetIdle() {
-        this.thumbsUpState.release();
+        this.thumbState.release();
         this.nebulaState.release();
     }
 
     update(elapsedTime) {
         this.uniforms.uTime.value = elapsedTime;
 
-        this.thumbsUpState.update();
+        // Delegate updates to state controllers
+        this.thumbState.update();
         this.nebulaState.update();
         this.scatterState.update();
     }

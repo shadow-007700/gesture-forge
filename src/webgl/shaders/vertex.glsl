@@ -13,6 +13,10 @@ uniform float uThumbBuzz;
 uniform float uThumbMaxSize;
 uniform float uThumbBaseSize;
 
+// NEW: Transformation Uniforms
+uniform float uThumbMirror;
+uniform float uThumbRotation;
+
 attribute float aRandom;
 attribute vec3 aTargetPosition;
 
@@ -31,6 +35,20 @@ void main() {
     // STATE B: Target Shape (The Hand)
     vec3 targetPos = aTargetPosition;
     
+    // --- NEW: HOLOGRAPHIC TRANSFORMATIONS ---
+    // 1. Mirroring (Flips X if it's the Left Hand)
+    targetPos.x *= uThumbMirror;
+    
+    // 2. The Barrel Roll (Rotates the X and Y coordinates around the Z axis)
+    float cRoll = cos(uThumbRotation);
+    float sRoll = sin(uThumbRotation);
+    vec2 rolledXY = vec2(
+        targetPos.x * cRoll - targetPos.y * sRoll,
+        targetPos.x * sRoll + targetPos.y * cRoll
+    );
+    targetPos.xy = rolledXY;
+
+    // 3. Apply the buzz AFTER rotation so it stays localized
     targetPos.x += sin(uTime * 3.0 + aRandom * 100.0) * uThumbBuzz;
     targetPos.y += cos(uTime * 3.3 + aRandom * 100.0) * uThumbBuzz;
     targetPos.z += sin(uTime * 2.8 + aRandom * 100.0) * uThumbBuzz;

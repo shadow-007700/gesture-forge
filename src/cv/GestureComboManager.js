@@ -2,40 +2,46 @@ export class GestureComboManager {
     constructor(particleSystem) {
         this.particles = particleSystem;
         
-        // Internal State tracking
-        this.isMorphed = false;
+        // NEW: Track the highly specific state of the hand
+        this.currentThumbState = null; 
         this.lastFistTime = 0;
     }
 
-    processGesture(gestureName, landmarks) {
+    processGesture(gestureName, landmarks, handedness) {
         if (gestureName === "None") {
             this.particles.resetIdle();
-            this.isMorphed = false;
+            this.currentThumbState = null;
             return;
         }
 
         if (gestureName === "Closed_Fist") {
             this.lastFistTime = Date.now();
             this.particles.morphToFist();
-            this.isMorphed = false;
+            this.currentThumbState = null;
         }
         else if (gestureName === "Open_Palm" && (Date.now() - this.lastFistTime < 600)) {
-            // Combo successful: Fist -> Open Palm within 600ms!
             this.particles.triggerScatter();
-            this.lastFistTime = 0; // Reset combo timer
-            this.isMorphed = false; 
+            this.lastFistTime = 0; 
+            this.currentThumbState = null; 
         }
-        else if (gestureName === "Thumb_Up") {
-            if (!this.isMorphed) {
-                this.particles.morphToHand(landmarks);
-                this.isMorphed = true;
+        else if (gestureName === "Thumb_Up" || gestureName === "Thumb_Down") {
+            // NEW: Create a unique signature, e.g., "Thumb_Up_Right"
+            const stateId = `${gestureName}_${handedness}`;
+            
+            // Only trigger the WebGL particles if the state actually changed!
+            if (this.currentThumbState !== stateId) {
+                // Setup the config flags for the shader
+                const isLeftHand = handedness === "Left";
+                const isDown = gestureName === "Thumb_Down";
+                
+                // Fire the particles with the specific config!
+                this.particles.morphToHand({ isLeftHand, isDown }, landmarks);
+                this.currentThumbState = stateId;
             }
         }
         else {
-            // Catch-all for Pointing_Up, ILoveYou, or an Open_Palm with no combo.
-            // Guarantees the nebula never gets "stuck"
             this.particles.resetIdle();
-            this.isMorphed = false;
+            this.currentThumbState = null;
         }
     }
 }

@@ -9,7 +9,6 @@ async function bootApp() {
     const gestureOutputElement = document.getElementById('gesture-output');
     const videoElement = document.getElementById('webcam');
 
-    // 1. Initialize WebGL Scene
     const webgl = new WebGLScene();
     const particles = new ParticleSystem(webgl.scene);
 
@@ -22,10 +21,7 @@ async function bootApp() {
     };
     webgl.start();
 
-    // 2. Initialize the new Gesture Combo Manager
     const comboManager = new GestureComboManager(particles);
-
-    // 3. Initialize Computer Vision
     const tracker = new HandTracker(videoElement);
     
     statusElement.innerText = "Loading AI Model...";
@@ -47,13 +43,13 @@ async function bootApp() {
         return;
     }
 
-    // 4. The Bridge: Pass AI data to the GUI and the Combo Manager
-    tracker.onGestureDetected = (gestureName, landmarks) => {
+    // NEW: Receive the 'handedness' variable
+    tracker.onGestureDetected = (gestureName, landmarks, handedness) => {
         gestureOutputElement.innerText = gestureName;
         gestureOutputElement.style.opacity = gestureName === "None" ? 0.3 : 1.0;
         
-        // main.js is now totally clean! It just delegates logic to the manager.
-        comboManager.processGesture(gestureName, landmarks);
+        // Pass everything cleanly into the state machine
+        comboManager.processGesture(gestureName, landmarks, handedness);
     };
 }
 
