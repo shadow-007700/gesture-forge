@@ -13,15 +13,18 @@ export const vertexShader = `
     void main() {
         // STATE A: Idle floating
         vec3 idlePos = position;
-        idlePos.x += sin(uTime * 0.5 + aRandom * 10.0) * 0.2;
-        idlePos.y += cos(uTime * 0.3 + aRandom * 10.0) * 0.2;
-        idlePos.z += sin(uTime * 0.4 + aRandom * 10.0) * 0.2;
+        idlePos.x += sin(uTime * 0.5 + aRandom * 10.0) * 1.5;
+        idlePos.y += cos(uTime * 0.3 + aRandom * 10.0) * 1.5;
+        idlePos.z += sin(uTime * 0.4 + aRandom * 10.0) * 1.5;
 
         // STATE B: Target Shape (The Hand)
         vec3 targetPos = aTargetPosition;
-        targetPos.x += sin(uTime * 1.0 + aRandom * 20.0) * 0.05;
-        targetPos.y += cos(uTime * 1.2 + aRandom * 20.0) * 0.05;
-        targetPos.z += sin(uTime * 0.8 + aRandom * 20.0) * 0.05;
+        
+        // TWEAK 1: Tightened the "Contained Buzz" radius (from 0.35 down to 0.15).
+        // They will still vibrate with high energy, but they won't swing past the invisible boundary walls!
+        targetPos.x += sin(uTime * 3.0 + aRandom * 100.0) * 0.15;
+        targetPos.y += cos(uTime * 3.3 + aRandom * 100.0) * 0.15;
+        targetPos.z += sin(uTime * 2.8 + aRandom * 100.0) * 0.15;
 
         // Blends to Thumbs Up
         vec3 finalPos = mix(idlePos, targetPos, uMorphProgress);
@@ -32,7 +35,6 @@ export const vertexShader = `
         float rand3 = fract(sin(aRandom * 39.3460) * 43758.5453);
 
         // STATE C: THE FIST NEBULA (Volumetric Swirl)
-        // BUG FIX: Increased spread radius from 14.0 to 26.0 so it fills the screen perfectly!
         float nRadius = pow(rand1, 2.5) * 26.0; 
         float nTheta = rand2 * 6.28318; 
         float nPhi = acos(2.0 * rand3 - 1.0); 
@@ -43,7 +45,6 @@ export const vertexShader = `
             nRadius * sin(nPhi) * sin(nTheta)
         );
 
-        // Add the "Vortex Twist"
         float distToCenter = length(cloudPos);
         float twist = -distToCenter * 0.35; 
         float s = sin(twist);
@@ -53,7 +54,6 @@ export const vertexShader = `
             cloudPos.x * s + cloudPos.z * c
         );
 
-        // BUG FIX: Slightly increased rotation speed of the nebula from 0.15 to 0.25
         float rot = uTime * 0.25;
         vec3 nebulaPos = vec3(
             cloudPos.x * cos(rot) - cloudPos.z * sin(rot),
@@ -94,7 +94,11 @@ export const vertexShader = `
 
         // --- Visibility Math ---
         float vis = 1.0;
-        vis = mix(vis, 1.0 - step(0.10, aRandom), uMorphProgress);
+        
+        // TWEAK 2: Increased particle count to 18% (approx 9,000 points).
+        // Since we are adding more negative space (padding) with smaller base sizes, we can pack more stars in!
+        vis = mix(vis, 1.0 - step(0.18, aRandom), uMorphProgress);
+        
         vis = mix(vis, 1.0 - step(0.08, aRandom), uFistProgress);
         
         float isScattering = step(0.001, uScatterForce);
@@ -114,9 +118,10 @@ export const vertexShader = `
         // --- Dynamic Size Scaling ---
         float idleSize = 10.0 * aRandom + 5.0;
         
-        // BUG FIX: Dramatically reduced the size of Thumbs Up particles (from 30.0 to 10.0)
-        // This stops them from overlapping into a solid blob, revealing the individual stardust specs!
-        float morphedSize = 10.0 * aRandom + 4.0; 
+        // TWEAK 3: Kept your 16.0 max size, but lowered the base size to 0.8 and steepened the curve (pow 5.0).
+        // This makes the vast majority of points microscopic, creating massive "padding" between the few larger orbs.
+        float thumbRandom = fract(aRandom * 888.888);
+        float morphedSize = 16.0 * pow(thumbRandom, 5.0) + 0.8; 
         
         float randomGas = fract(aRandom * 555.555);
         float nebulaSize = 40.0 * pow(randomGas, 3.0) + 2.0; 

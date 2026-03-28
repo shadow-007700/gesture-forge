@@ -18,6 +18,14 @@ body {
     overflow: hidden;
 }
 
+/* BUG FIX 3: Push the 3D Canvas behind our HTML text! */
+canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: -1; 
+}
+
 #webcam {
     transform: scaleX(-1); /* Mirrors the webcam */
     display: block;
@@ -26,7 +34,7 @@ body {
     position: fixed;
     bottom: 20px;
     left: 20px;
-    width: 250px; /* Smaller monitor size */
+    width: 250px; 
     max-width: 90vw;
     max-height: 70vh;
     background-color: #1a1a1a;
@@ -48,6 +56,7 @@ body {
     padding: 20px;
     box-sizing: border-box;
     pointer-events: none;
+    z-index: 5; /* Forces UI above the canvas */
 }
 
 #status {
