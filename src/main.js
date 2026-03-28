@@ -1,7 +1,8 @@
 import { ParticleSystem } from './webgl/Particles.js';
 import { WebGLScene } from './webgl/Scene.js';
 import { HandTracker } from './cv/HandTracker.js';
-import './style.css';
+import { GestureComboManager } from './cv/GestureComboManager.js';
+import './style.css'; 
 
 async function bootApp() {
     const statusElement = document.getElementById('status');
@@ -12,7 +13,6 @@ async function bootApp() {
     const webgl = new WebGLScene();
     const particles = new ParticleSystem(webgl.scene);
 
-    // NEW: Connect the VFX Controller to the particles for Dynamic Colors
     if (webgl.vfxController) {
         webgl.vfxController.setParticles(particles);
     }
@@ -22,12 +22,20 @@ async function bootApp() {
     };
     webgl.start();
 
-    // 2. Initialize Computer Vision
+    // 2. Initialize the new Gesture Combo Manager
+    const comboManager = new GestureComboManager(particles);
+
+    // 3. Initialize Computer Vision
     const tracker = new HandTracker(videoElement);
     
     statusElement.innerText = "Loading AI Model...";
-    await tracker.init();
+    const modelLoaded = await tracker.init();
     
+    if (!modelLoaded) {
+        statusElement.innerText = "Error: Could not load AI model.";
+        return;
+    }
+
     statusElement.innerText = "Model loaded. Please allow webcam access...";
     try {
         await tracker.startWebcam();
@@ -39,42 +47,13 @@ async function bootApp() {
         return;
     }
 
-    // Keep track of state outside the loop (Restored your custom combo logic!)
-    let isMorphed = false;
-    let lastFistTime = 0;
-
+    // 4. The Bridge: Pass AI data to the GUI and the Combo Manager
     tracker.onGestureDetected = (gestureName, landmarks) => {
         gestureOutputElement.innerText = gestureName;
+        gestureOutputElement.style.opacity = gestureName === "None" ? 0.3 : 1.0;
         
-        if (gestureName === "None") {
-            gestureOutputElement.style.opacity = 0.3;
-            particles.resetIdle();
-            isMorphed = false;
-        } else {
-            gestureOutputElement.style.opacity = 1.0;
-
-            if (gestureName === "Closed_Fist") {
-                lastFistTime = Date.now();
-                particles.morphToFist();
-                isMorphed = false;
-            }
-            else if (gestureName === "Open_Palm" && (Date.now() - lastFistTime < 600)) {
-                particles.triggerScatter();
-                lastFistTime = 0; // Reset combo timer
-                isMorphed = false; 
-            }
-            else if (gestureName === "Thumb_Up") {
-                if (!isMorphed) {
-                    particles.morphToHand(landmarks);
-                    isMorphed = true;
-                }
-            }
-            else {
-                // Catch-all for Pointing_Up, ILoveYou, or Open_Palm (no combo).
-                particles.resetIdle();
-                isMorphed = false;
-            }
-        }
+        // main.js is now totally clean! It just delegates logic to the manager.
+        comboManager.processGesture(gestureName, landmarks);
     };
 }
 
