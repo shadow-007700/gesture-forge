@@ -12,7 +12,7 @@ uniform float uThumbBuzz;
 uniform float uThumbMaxSize;
 uniform float uThumbBaseSize;
 
-// UPGRADED: Dual Vectors for Dual Hands
+// Dual Vectors for Dual Hands
 uniform vec2 uThumbMirror;
 uniform vec2 uThumbRotation;
 uniform vec2 uThumbActive;
@@ -33,49 +33,63 @@ void main() {
     idlePos.y += cos(uTime * 0.3 + aRandom * 10.0) * 1.5;
     idlePos.z += sin(uTime * 0.4 + aRandom * 10.0) * 1.5;
 
-    // --- DYNAMIC TEAM SELECTION ---
-    float isTeamB = aTeam; 
-    float isTeamA = 1.0 - aTeam;
-
-    // If I'm Team B, use Vector Y. If I'm Team A, use Vector X.
-    float teamMirror = mix(uThumbMirror.x, uThumbMirror.y, isTeamB);
-    float teamRotation = mix(uThumbRotation.x, uThumbRotation.y, isTeamB);
-    float teamActive = mix(uThumbActive.x, uThumbActive.y, isTeamB);
-
-    // STATE B: Target Shape (The Hand)
-    vec3 targetPos = aTargetPosition;
+    // --- THE MAGNETIC GHOST HAND CALCULATION ---
+    // We calculate the physical 3D position of BOTH hands every frame, even if they aren't on screen!
+    vec3 baseShape = aTargetPosition;
     
-    // 1. Mirroring
-    targetPos.x *= teamMirror;
-    
-    // 2. The Barrel Roll
-    float cRoll = cos(teamRotation);
-    float sRoll = sin(teamRotation);
-    vec2 rolledXY = vec2(
-        targetPos.x * cRoll - targetPos.y * sRoll,
-        targetPos.x * sRoll + targetPos.y * cRoll
+    // 1. LEFT HAND GHOST (Pos A)
+    vec3 posLeft = baseShape;
+    posLeft.x *= uThumbMirror.x;
+    float cRollL = cos(uThumbRotation.x);
+    float sRollL = sin(uThumbRotation.x);
+    posLeft.xy = vec2(
+        posLeft.x * cRollL - posLeft.y * sRollL,
+        posLeft.x * sRollL + posLeft.y * cRollL
     );
-    targetPos.xy = rolledXY;
-
-    // 3. Dual Stage Framing (Shift and Scale)
-    // If BOTH vectors are > 0, dualFactor will approach 1.0
+    
+    // 2. RIGHT HAND GHOST (Pos B)
+    vec3 posRight = baseShape;
+    posRight.x *= uThumbMirror.y;
+    float cRollR = cos(uThumbRotation.y);
+    float sRollR = sin(uThumbRotation.y);
+    posRight.xy = vec2(
+        posRight.x * cRollR - posRight.y * sRollR,
+        posRight.x * sRollR + posRight.y * cRollR
+    );
+    
+    // 3. DYNAMIC STAGE FRAMING
     float dualFactor = uThumbActive.x * uThumbActive.y; 
     
-    // Scale down to 70% if both hands are active
-    float scaleMulti = mix(1.0, 0.7, dualFactor);
-    targetPos *= scaleMulti;
+    // UPGRADED: Hands stay at 90% scale when both are on screen, making them much bigger!
+    float scaleMulti = mix(1.0, 0.9, dualFactor); 
+    posLeft *= scaleMulti;
+    posRight *= scaleMulti;
     
-    // Offset: Team A shifts Left (-15), Team B shifts Right (+15)
-    float shiftX = mix(-15.0, 15.0, isTeamB);
-    targetPos.x += shiftX * dualFactor;
+    // Push them apart only if BOTH hands are active
+    posLeft.x += mix(0.0, -15.0, dualFactor);
+    posRight.x += mix(0.0, 15.0, dualFactor);
+    
+    // 4. LOCALIZED BUZZ
+    vec3 buzz = vec3(
+        sin(uTime * 3.0 + aRandom * 100.0) * uThumbBuzz,
+        cos(uTime * 3.3 + aRandom * 100.0) * uThumbBuzz,
+        sin(uTime * 2.8 + aRandom * 100.0) * uThumbBuzz
+    );
+    posLeft += buzz;
+    posRight += buzz;
 
-    // 4. Localized Buzz
-    targetPos.x += sin(uTime * 3.0 + aRandom * 100.0) * uThumbBuzz;
-    targetPos.y += cos(uTime * 3.3 + aRandom * 100.0) * uThumbBuzz;
-    targetPos.z += sin(uTime * 2.8 + aRandom * 100.0) * uThumbBuzz;
-
-    // Only apply target pos if this specific team is active!
-    vec3 finalPos = mix(idlePos, targetPos, teamActive);
+    // --- THE MAGNETIC PULL (Target Interpolation) ---
+    // If Team Left's hand is missing, it magnetically targets the Right hand (and vice versa).
+    // As the missing hand fades in, the particles physically fly across the screen to build it!
+    vec3 myTargetPos = mix(
+        mix(posRight, posLeft, uThumbActive.x), // If I am Team 0.0 (Left Team): Prefer Left, fall back to Right
+        mix(posLeft, posRight, uThumbActive.y), // If I am Team 1.0 (Right Team): Prefer Right, fall back to Left
+        aTeam
+    );
+    
+    // We only go to idle if NO hands are on screen.
+    float anyHandActive = max(uThumbActive.x, uThumbActive.y);
+    vec3 finalPos = mix(idlePos, myTargetPos, anyHandActive);
 
     // --- TRUE CHAOS RANDOMNESS ---
     float rand1 = fract(sin(aRandom * 12.9898) * 43758.5453);
@@ -117,7 +131,7 @@ void main() {
     vec3 cNebCore = boostNeon(uColorNebulaCore);
     vec3 cNebEdge = boostNeon(uColorNebulaEdge);
 
-    vec3 baseColor = mix(cIdle, cThumb, teamActive); 
+    vec3 baseColor = mix(cIdle, cThumb, anyHandActive); 
     
     float colorMix = clamp(distToCenter / 12.0, 0.0, 1.0);
     vec3 nebulaColor = mix(cNebCore, cNebEdge, colorMix);
@@ -146,7 +160,7 @@ void main() {
     // --- Visibility Math ---
     float vis = 1.0;
     
-    vis = mix(vis, 1.0 - step(0.18, aRandom), teamActive);
+    vis = mix(vis, 1.0 - step(0.18, aRandom), anyHandActive);
     vis = mix(vis, 1.0 - step(0.08, aRandom), uFistProgress);
     
     float isScattering = step(0.001, uScatterForce);
@@ -172,7 +186,7 @@ void main() {
     float randomGas = fract(aRandom * 555.555);
     float nebulaSize = 40.0 * pow(randomGas, 3.0) + 2.0; 
     
-    float currentSize = mix(idleSize, morphedSize, teamActive);
+    float currentSize = mix(idleSize, morphedSize, anyHandActive);
     currentSize = mix(currentSize, nebulaSize, uFistProgress);
     
     float explosionPuff = sin(scatterPhase1 * 3.14159) * (40.0 * rand3 + 10.0); 
