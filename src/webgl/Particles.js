@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { vertexShader } from './shaders/vertexShader.js';
-import { fragmentShader } from './shaders/fragmentShader.js';
+import vertexShader from './shaders/vertex.glsl';
+import fragmentShader from './shaders/fragment.glsl';
 import { ThumbsUpState } from './gestures/ThumbsUpState.js';
 import { NebulaState } from './gestures/NebulaState.js';
 import { ScatterState } from './gestures/ScatterState.js';
