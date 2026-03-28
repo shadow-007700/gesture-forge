@@ -5,9 +5,6 @@ export class HandTracker {
         this.video = videoElement;
         this.recognizer = null;
         this.lastVideoTime = -1;
-        this.currentGesture = "None";
-        this.handedness = "None"; // NEW: Track Left/Right hand
-        this.landmarks = [];
         this.onGestureDetected = null; 
     }
 
@@ -23,7 +20,7 @@ export class HandTracker {
                     delegate: "GPU" 
                 },
                 runningMode: "VIDEO",
-                numHands: 1 
+                numHands: 2 // UPGRADED: Now tracks up to 2 hands!
             });
 
             return true;
@@ -55,24 +52,21 @@ export class HandTracker {
             this.lastVideoTime = this.video.currentTime;
             
             const results = this.recognizer.recognizeForVideo(this.video, performance.now());
+            const detectedHands = [];
 
-            if (results.gestures.length > 0) {
-                this.currentGesture = results.gestures[0][0].categoryName;
-                this.landmarks = results.landmarks[0]; 
-                
-                // NEW: Extract which hand the user is holding up
-                if (results.handednesses && results.handednesses.length > 0) {
-                    this.handedness = results.handednesses[0][0].categoryName; 
+            // UPGRADED: Extract data for ALL detected hands into an array
+            if (results.gestures && results.gestures.length > 0) {
+                for (let i = 0; i < results.gestures.length; i++) {
+                    detectedHands.push({
+                        gestureName: results.gestures[i][0].categoryName,
+                        landmarks: results.landmarks[i],
+                        handedness: results.handednesses[i][0].categoryName
+                    });
                 }
-            } else {
-                this.currentGesture = "None";
-                this.handedness = "None";
-                this.landmarks = [];
             }
 
             if (this.onGestureDetected) {
-                // NEW: Pass handedness to our application loop
-                this.onGestureDetected(this.currentGesture, this.landmarks, this.handedness);
+                this.onGestureDetected(detectedHands);
             }
         }
         

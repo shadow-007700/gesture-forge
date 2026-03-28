@@ -35,7 +35,7 @@ async function bootApp() {
     statusElement.innerText = "Model loaded. Please allow webcam access...";
     try {
         await tracker.startWebcam();
-        statusElement.innerText = "Tracking Active - Show your hand!";
+        statusElement.innerText = "Tracking Active - Show your hands!";
         statusElement.style.color = "#00ff88";
     } catch (err) {
         statusElement.innerText = "Error: Webcam access denied.";
@@ -43,13 +43,18 @@ async function bootApp() {
         return;
     }
 
-    // NEW: Receive the 'handedness' variable
-    tracker.onGestureDetected = (gestureName, landmarks, handedness) => {
-        gestureOutputElement.innerText = gestureName;
-        gestureOutputElement.style.opacity = gestureName === "None" ? 0.3 : 1.0;
+    // UPGRADED: Receive the array of multiple hands
+    tracker.onGestureDetected = (hands) => {
+        // Format text for multiple hands: e.g., "Left: Thumb_Up | Right: Closed_Fist"
+        let textOut = hands.length > 0 
+            ? hands.map(h => `${h.handedness}: ${h.gestureName}`).join(' | ') 
+            : "None";
+            
+        gestureOutputElement.innerText = textOut;
+        gestureOutputElement.style.opacity = hands.length === 0 ? 0.3 : 1.0;
         
-        // Pass everything cleanly into the state machine
-        comboManager.processGesture(gestureName, landmarks, handedness);
+        // Pass the array directly into the state machine
+        comboManager.processGestures(hands);
     };
 }
 

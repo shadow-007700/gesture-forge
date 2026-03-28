@@ -1,5 +1,4 @@
 uniform float uTime;
-uniform float uMorphProgress;
 uniform float uScatterForce; 
 uniform float uFistProgress; 
 
@@ -13,12 +12,14 @@ uniform float uThumbBuzz;
 uniform float uThumbMaxSize;
 uniform float uThumbBaseSize;
 
-// NEW: Transformation Uniforms
-uniform float uThumbMirror;
-uniform float uThumbRotation;
+// UPGRADED: Dual Vectors for Dual Hands
+uniform vec2 uThumbMirror;
+uniform vec2 uThumbRotation;
+uniform vec2 uThumbActive;
 
 attribute float aRandom;
 attribute vec3 aTargetPosition;
+attribute float aTeam; // 0.0 (Left) or 1.0 (Right)
 
 varying float vVisibility;
 varying vec3 vColor;
@@ -32,28 +33,49 @@ void main() {
     idlePos.y += cos(uTime * 0.3 + aRandom * 10.0) * 1.5;
     idlePos.z += sin(uTime * 0.4 + aRandom * 10.0) * 1.5;
 
+    // --- DYNAMIC TEAM SELECTION ---
+    float isTeamB = aTeam; 
+    float isTeamA = 1.0 - aTeam;
+
+    // If I'm Team B, use Vector Y. If I'm Team A, use Vector X.
+    float teamMirror = mix(uThumbMirror.x, uThumbMirror.y, isTeamB);
+    float teamRotation = mix(uThumbRotation.x, uThumbRotation.y, isTeamB);
+    float teamActive = mix(uThumbActive.x, uThumbActive.y, isTeamB);
+
     // STATE B: Target Shape (The Hand)
     vec3 targetPos = aTargetPosition;
     
-    // --- NEW: HOLOGRAPHIC TRANSFORMATIONS ---
-    // 1. Mirroring (Flips X if it's the Left Hand)
-    targetPos.x *= uThumbMirror;
+    // 1. Mirroring
+    targetPos.x *= teamMirror;
     
-    // 2. The Barrel Roll (Rotates the X and Y coordinates around the Z axis)
-    float cRoll = cos(uThumbRotation);
-    float sRoll = sin(uThumbRotation);
+    // 2. The Barrel Roll
+    float cRoll = cos(teamRotation);
+    float sRoll = sin(teamRotation);
     vec2 rolledXY = vec2(
         targetPos.x * cRoll - targetPos.y * sRoll,
         targetPos.x * sRoll + targetPos.y * cRoll
     );
     targetPos.xy = rolledXY;
 
-    // 3. Apply the buzz AFTER rotation so it stays localized
+    // 3. Dual Stage Framing (Shift and Scale)
+    // If BOTH vectors are > 0, dualFactor will approach 1.0
+    float dualFactor = uThumbActive.x * uThumbActive.y; 
+    
+    // Scale down to 70% if both hands are active
+    float scaleMulti = mix(1.0, 0.7, dualFactor);
+    targetPos *= scaleMulti;
+    
+    // Offset: Team A shifts Left (-15), Team B shifts Right (+15)
+    float shiftX = mix(-15.0, 15.0, isTeamB);
+    targetPos.x += shiftX * dualFactor;
+
+    // 4. Localized Buzz
     targetPos.x += sin(uTime * 3.0 + aRandom * 100.0) * uThumbBuzz;
     targetPos.y += cos(uTime * 3.3 + aRandom * 100.0) * uThumbBuzz;
     targetPos.z += sin(uTime * 2.8 + aRandom * 100.0) * uThumbBuzz;
 
-    vec3 finalPos = mix(idlePos, targetPos, uMorphProgress);
+    // Only apply target pos if this specific team is active!
+    vec3 finalPos = mix(idlePos, targetPos, teamActive);
 
     // --- TRUE CHAOS RANDOMNESS ---
     float rand1 = fract(sin(aRandom * 12.9898) * 43758.5453);
@@ -95,7 +117,7 @@ void main() {
     vec3 cNebCore = boostNeon(uColorNebulaCore);
     vec3 cNebEdge = boostNeon(uColorNebulaEdge);
 
-    vec3 baseColor = mix(cIdle, cThumb, uMorphProgress); 
+    vec3 baseColor = mix(cIdle, cThumb, teamActive); 
     
     float colorMix = clamp(distToCenter / 12.0, 0.0, 1.0);
     vec3 nebulaColor = mix(cNebCore, cNebEdge, colorMix);
@@ -124,7 +146,7 @@ void main() {
     // --- Visibility Math ---
     float vis = 1.0;
     
-    vis = mix(vis, 1.0 - step(0.18, aRandom), uMorphProgress);
+    vis = mix(vis, 1.0 - step(0.18, aRandom), teamActive);
     vis = mix(vis, 1.0 - step(0.08, aRandom), uFistProgress);
     
     float isScattering = step(0.001, uScatterForce);
@@ -150,7 +172,7 @@ void main() {
     float randomGas = fract(aRandom * 555.555);
     float nebulaSize = 40.0 * pow(randomGas, 3.0) + 2.0; 
     
-    float currentSize = mix(idleSize, morphedSize, uMorphProgress);
+    float currentSize = mix(idleSize, morphedSize, teamActive);
     currentSize = mix(currentSize, nebulaSize, uFistProgress);
     
     float explosionPuff = sin(scatterPhase1 * 3.14159) * (40.0 * rand3 + 10.0); 

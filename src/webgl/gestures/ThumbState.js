@@ -2,15 +2,16 @@ export class ThumbState {
     constructor(particleSystem) {
         this.system = particleSystem;
         this.points = [{ x: 0, y: 0 }];
-        this.isActive = false;
         
-        this.currentRotation = 0;
-        this.targetRotation = 0;
+        // UPGRADED: Track everything independently
+        this.isActive = { left: false, right: false };
+        this.currentRotation = { left: 0, right: 0 };
+        this.targetRotation = { left: 0, right: 0 };
+        this.isTransitioning = { left: false, right: false };
+        this.nextConfig = { left: null, right: null };
+        this.currentMirror = { left: -1.0, right: 1.0 }; 
         
-        // NEW: For the split-second scramble transition
-        this.isTransitioning = false;
-        this.nextConfig = null;
-        
+        this.built = false;
         this.loadShape();
     }
 
@@ -83,71 +84,82 @@ export class ThumbState {
         };
     }
 
-    trigger(config = { isLeftHand: false, isDown: false }) {
-        const targetRot = config.isDown ? Math.PI : 0;
-        let mirror = config.isLeftHand ? -1.0 : 1.0;
+    trigger(configs) {
+        this.processHandConfig('left', configs.left);
+        this.processHandConfig('right', configs.right);
         
-        // FIX ISSUE 1: Rotating a mirrored hand 180 degrees flips the thumb to the wrong side. 
-        // We mathematically invert the mirror if the thumb is down to correct it!
-        if (config.isDown) mirror *= -1.0; 
+        // Only build the base points array once the image is loaded and a trigger occurs
+        if (!this.built && this.points.length > 1) {
+            this.buildPositions();
+        }
+    }
 
-        // FIX ISSUE 2 & 3: If shape is already active, don't snap. Trigger the scramble transition!
-        if (this.isActive) {
-            // Only transition if the target actually changed (allows Up -> Down AND Down -> Up)
-            if (this.targetRotation !== targetRot || this.system.uniforms.uThumbMirror.value !== mirror) {
-                this.isTransitioning = true;
-                this.nextConfig = { targetRot, mirror };
+    processHandConfig(side, config) {
+        if (!config) {
+            this.isActive[side] = false;
+            return;
+        }
+        
+        const targetRot = config.isDown ? Math.PI : 0;
+        let mirror = (side === 'left') ? -1.0 : 1.0;
+        if (config.isDown) mirror *= -1.0;
+        
+        if (this.isActive[side]) {
+            if (this.targetRotation[side] !== targetRot || this.currentMirror[side] !== mirror) {
+                this.isTransitioning[side] = true;
+                this.nextConfig[side] = { targetRot, mirror };
             }
             return;
         }
+        
+        this.targetRotation[side] = targetRot;
+        this.currentMirror[side] = mirror;
+        this.system.uniforms.uThumbMirror.value[side === 'left' ? 'x' : 'y'] = mirror;
+        this.isActive[side] = true;
+        this.isTransitioning[side] = false;
+    }
 
-        this.targetRotation = targetRot;
-        this.system.uniforms.uThumbMirror.value = mirror;
-        this.isActive = true;
-        this.isTransitioning = false;
-
-        if (this.points.length <= 1) return;
-
+    buildPositions() {
         const targetPositions = this.system.geometry.attributes.aTargetPosition.array;
-
         for (let i = 0; i < this.system.particleCount; i++) {
             const i3 = i * 3;
+            // Both teams just receive the raw base coordinates. The shader does the mirroring!
             const point = this.points[Math.floor(Math.random() * this.points.length)];
-            
             const scale = 32.0;
-
             targetPositions[i3] = point.x * scale;
             targetPositions[i3 + 1] = point.y * scale;
             targetPositions[i3 + 2] = (Math.random() - 0.5) * 4.0;
         }
-
         this.system.geometry.attributes.aTargetPosition.needsUpdate = true;
+        this.built = true;
     }
 
     release() {
-        this.isActive = false;
-        this.isTransitioning = false;
+        this.isActive.left = false;
+        this.isActive.right = false;
+        this.isTransitioning.left = false;
+        this.isTransitioning.right = false;
     }
 
     update() {
-        if (this.isTransitioning) {
-            // PHASE 1: Drop the morph progress quickly to scatter back to idle
-            this.system.uniforms.uMorphProgress.value *= 0.8;
+        ['left', 'right'].forEach(side => {
+            const vecKey = side === 'left' ? 'x' : 'y';
             
-            if (this.system.uniforms.uMorphProgress.value < 0.05) {
-                // PHASE 2: Lock in the new rotation and mirror once hidden, then reform!
-                this.targetRotation = this.nextConfig.targetRot;
-                this.system.uniforms.uThumbMirror.value = this.nextConfig.mirror;
-                this.isTransitioning = false;
+            if (this.isTransitioning[side]) {
+                this.system.uniforms.uThumbActive.value[vecKey] *= 0.8;
+                if (this.system.uniforms.uThumbActive.value[vecKey] < 0.05) {
+                    this.targetRotation[side] = this.nextConfig[side].targetRot;
+                    this.currentMirror[side] = this.nextConfig[side].mirror;
+                    this.system.uniforms.uThumbMirror.value[vecKey] = this.currentMirror[side];
+                    this.isTransitioning[side] = false;
+                }
+            } else {
+                const target = this.isActive[side] ? 1.0 : 0.0;
+                this.system.uniforms.uThumbActive.value[vecKey] += (target - this.system.uniforms.uThumbActive.value[vecKey]) * 0.06;
             }
-        } else {
-            // Normal fade in/out
-            const target = this.isActive ? 1.0 : 0.0;
-            this.system.uniforms.uMorphProgress.value += (target - this.system.uniforms.uMorphProgress.value) * 0.06;
-        }
-        
-        // Always smoothly animate the barrel roll rotation
-        this.currentRotation += (this.targetRotation - this.currentRotation) * 0.1;
-        this.system.uniforms.uThumbRotation.value = this.currentRotation;
+            
+            this.currentRotation[side] += (this.targetRotation[side] - this.currentRotation[side]) * 0.1;
+            this.system.uniforms.uThumbRotation.value[vecKey] = this.currentRotation[side];
+        });
     }
 }
