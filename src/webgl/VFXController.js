@@ -14,10 +14,12 @@ export class VFXController {
             idle: '#00ff88',
             thumbsUp: '#00ffff',
             nebCore: '#19ccff',
-            nebEdge: '#cc1999'
+            nebEdge: '#cc1999',
+            // NEW: Void Storm Colors
+            tornadoCore: '#8a2be2', // Deep Violet
+            tornadoEdge: '#00ffff'  // Electric Cyan
         };
         
-        // NEW: Store default physics values
         this.physics = {
             nebulaRadius: 26.0,
             thumbBuzz: 0.15,
@@ -38,7 +40,6 @@ export class VFXController {
         }
     }
 
-    // NEW: Generic updater for numerical sliders
     updateFloat(uniformName, value) {
         if (this.particles && this.particles.uniforms[uniformName]) {
             this.particles.uniforms[uniformName].value = value;
@@ -51,8 +52,10 @@ export class VFXController {
         colorFolder.addColor(this.colors, 'thumbsUp').name('Thumbs Up').onChange(c => this.updateColor('uColorThumbsUp', c));
         colorFolder.addColor(this.colors, 'nebCore').name('Nebula Core').onChange(c => this.updateColor('uColorNebulaCore', c));
         colorFolder.addColor(this.colors, 'nebEdge').name('Nebula Edge').onChange(c => this.updateColor('uColorNebulaEdge', c));
+        // NEW: GUI Hooks
+        colorFolder.addColor(this.colors, 'tornadoCore').name('Tornado Base').onChange(c => this.updateColor('uColorTornadoCore', c));
+        colorFolder.addColor(this.colors, 'tornadoEdge').name('Tornado Flare').onChange(c => this.updateColor('uColorTornadoEdge', c));
 
-        // --- NEW: Physics Engine Folder ---
         const physicsFolder = this.gui.addFolder('Physics Engine');
         physicsFolder.add(this.physics, 'nebulaRadius').min(10).max(60).step(0.5).name('Nebula Radius').onChange(v => this.updateFloat('uNebulaRadius', v));
         physicsFolder.add(this.physics, 'thumbBuzz').min(0.0).max(1.0).step(0.01).name('Shape Vibrate').onChange(v => this.updateFloat('uThumbBuzz', v));

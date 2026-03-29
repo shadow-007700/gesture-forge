@@ -6,20 +6,22 @@ uniform vec3 uColorIdle;
 uniform vec3 uColorThumbsUp;
 uniform vec3 uColorNebulaCore;
 uniform vec3 uColorNebulaEdge;
+uniform vec3 uColorTornadoCore;
+uniform vec3 uColorTornadoEdge;
 
 uniform float uNebulaRadius;
 uniform float uThumbBuzz;
 uniform float uThumbMaxSize;
 uniform float uThumbBaseSize;
 
-// Dual Vectors for Dual Hands
 uniform vec2 uThumbMirror;
 uniform vec2 uThumbRotation;
 uniform vec2 uThumbActive;
+uniform vec2 uTornadoActive; 
 
 attribute float aRandom;
 attribute vec3 aTargetPosition;
-attribute float aTeam; // 0.0 (Left) or 1.0 (Right)
+attribute float aTeam; 
 
 varying float vVisibility;
 varying vec3 vColor;
@@ -27,23 +29,58 @@ varying vec3 vColor;
 #include "./includes/neonBooster.glsl"
 
 void main() {
-    // STATE A: Idle floating
     vec3 idlePos = position;
     idlePos.x += sin(uTime * 0.5 + aRandom * 10.0) * 1.5;
     idlePos.y += cos(uTime * 0.3 + aRandom * 10.0) * 1.5;
     idlePos.z += sin(uTime * 0.4 + aRandom * 10.0) * 1.5;
 
-    // --- TRUE CHAOS RANDOMNESS ---
-    // (Moved up so we can use these values for fluid turbulence!)
+    // We use these 3 INDEPENDENT random values to build a 3D volume, preventing the "Squiggle" artifact!
     float rand1 = fract(sin(aRandom * 12.9898) * 43758.5453);
     float rand2 = fract(sin(aRandom * 78.2330) * 43758.5453);
     float rand3 = fract(sin(aRandom * 39.3460) * 43758.5453);
 
-    // --- THE MAGNETIC GHOST HAND CALCULATION ---
     vec3 baseShape = aTargetPosition;
     
-    // 1. LEFT HAND GHOST (Pos A)
-    vec3 posLeft = baseShape;
+    // --- REALISTIC VOLUMETRIC TORNADO GENERATOR ---
+    float tHeightPct = rand1; 
+    
+    // Lowered max height to 35.0 and shifted base down to -12.0 to stop overflowing
+    float tHeight = (tHeightPct * 35.0) - 12.0; 
+    
+    // Decreased base radius to 0.6, increased top flare to 38.0
+    float maxRadius = mix(0.6, 38.0, pow(tHeightPct, 4.0));
+    
+    // The Debris Cloud: Adds a chaotic, chunky dust cloud at the very base
+    float isDebris = 1.0 - step(0.12, tHeightPct);
+    maxRadius += isDebris * (rand2 * 10.0); 
+
+    // Volumetric Fill: Distributes particles INSIDE the funnel wall, not just a 1D shell
+    // Using pow < 1.0 pushes most particles towards the outer edge, creating a hollow core!
+    float r = maxRadius * pow(rand3, 0.4); 
+    
+    float tAngle = rand2 * 6.28318;
+    
+    // Adjusted spin speed back up to ~19.0 at the base based on feedback
+    float tSpinSpeed = mix(19.0, 4.0, tHeightPct); 
+    float curAngle = tAngle + (uTime * tSpinSpeed);
+    
+    vec3 mathTornado = vec3(cos(curAngle) * r, tHeight, sin(curAngle) * r);
+    
+    // Realistic Spine Bend: A slow, lumbering sway, like a massive storm
+    mathTornado.x += sin(tHeightPct * 2.0 + uTime * 1.2) * mix(0.0, 10.0, tHeightPct);
+    mathTornado.z += cos(tHeightPct * 2.5 + uTime * 1.4) * mix(0.0, 10.0, tHeightPct);
+
+    // Chaotic wind turbulence inside the funnel
+    mathTornado.x += sin(uTime * 5.0 + rand1 * 100.0) * mix(0.2, 2.0, tHeightPct);
+    mathTornado.y += cos(uTime * 6.0 + rand2 * 100.0) * 0.5;
+    mathTornado.z += sin(uTime * 4.5 + rand3 * 100.0) * mix(0.2, 2.0, tHeightPct);
+
+    // --- SHAPE MIXING ---
+    vec3 shapeLeft = mix(baseShape, mathTornado, uTornadoActive.x);
+    vec3 shapeRight = mix(baseShape, mathTornado, uTornadoActive.y);
+
+    // 1. LEFT HAND GHOST 
+    vec3 posLeft = shapeLeft;
     posLeft.x *= uThumbMirror.x;
     float cRollL = cos(uThumbRotation.x);
     float sRollL = sin(uThumbRotation.x);
@@ -52,8 +89,8 @@ void main() {
         posLeft.x * sRollL + posLeft.y * cRollL
     );
     
-    // 2. RIGHT HAND GHOST (Pos B)
-    vec3 posRight = baseShape;
+    // 2. RIGHT HAND GHOST
+    vec3 posRight = shapeRight;
     posRight.x *= uThumbMirror.y;
     float cRollR = cos(uThumbRotation.y);
     float sRollR = sin(uThumbRotation.y);
@@ -62,12 +99,21 @@ void main() {
         posRight.x * sRollR + posRight.y * cRollR
     );
     
-    // 3. DYNAMIC STAGE FRAMING
-    float dualFactor = uThumbActive.x * uThumbActive.y; 
+    // --- COMBINED ACTIVE STATES ---
+    float activeLeft = max(uThumbActive.x, uTornadoActive.x);
+    float activeRight = max(uThumbActive.y, uTornadoActive.y);
     
-    float scaleMulti = mix(1.0, 0.9, dualFactor); 
-    posLeft *= scaleMulti;
-    posRight *= scaleMulti;
+    // 3. DYNAMIC FRAMING
+    float dualFactor = activeLeft * activeRight; 
+    float scaleMulti = mix(1.0, 0.85, dualFactor); 
+    
+    // BUG FIX: Anchor the Y-axis at the bottom (-12.0) before scaling!
+    // This stops the shapes from drastically floating upward when both hands are active.
+    posLeft.xz *= scaleMulti;
+    posLeft.y = (posLeft.y + 12.0) * scaleMulti - 12.0;
+    
+    posRight.xz *= scaleMulti;
+    posRight.y = (posRight.y + 12.0) * scaleMulti - 12.0;
     
     posLeft.x += mix(0.0, -15.0, dualFactor);
     posRight.x += mix(0.0, 15.0, dualFactor);
@@ -81,30 +127,25 @@ void main() {
     posLeft += buzz;
     posRight += buzz;
 
-    // --- THE FLUID LEAK TRANSITION ---
-    // We calculate a gravitational turbulence that only applies during the middle of a transition.
+    // --- FLUID LEAK TRANSITION ---
     vec3 fluidGravity = vec3(
-        sin(uTime * 4.0 + aRandom * 50.0) * (20.0 * rand1), // X-axis splashing
-        -50.0 * rand2 - 10.0,                               // Y-axis heavy gravity drag
-        cos(uTime * 4.0 + rand3 * 50.0) * (20.0 * rand1)    // Z-axis splashing
+        sin(uTime * 4.0 + aRandom * 50.0) * (20.0 * rand1), 
+        -50.0 * rand2 - 10.0,                               
+        cos(uTime * 4.0 + rand3 * 50.0) * (20.0 * rand1)    
     );
 
-    // sin(active * PI) creates a perfect 0 -> 1 -> 0 curve. 
-    // We raise it to pow 0.6 to make the "leaky" feeling last slightly longer!
-    float leakLeft = pow(sin(uThumbActive.x * 3.14159), 0.6); 
-    float leakRight = pow(sin(uThumbActive.y * 3.14159), 0.6);
+    float leakLeft = pow(sin(activeLeft * 3.14159), 0.6); 
+    float leakRight = pow(sin(activeRight * 3.14159), 0.6);
 
-    vec3 targetLeft = mix(posRight, posLeft, uThumbActive.x) + (fluidGravity * leakLeft);
-    vec3 targetRight = mix(posLeft, posRight, uThumbActive.y) + (fluidGravity * leakRight);
+    vec3 targetLeft = mix(posRight, posLeft, activeLeft) + (fluidGravity * leakLeft);
+    vec3 targetRight = mix(posLeft, posRight, activeRight) + (fluidGravity * leakRight);
 
-    // Apply the team logic
     vec3 myTargetPos = mix(targetLeft, targetRight, aTeam);
     
-    // We only go to idle if NO hands are on screen.
-    float anyHandActive = max(uThumbActive.x, uThumbActive.y);
+    float anyHandActive = max(activeLeft, activeRight);
     vec3 finalPos = mix(idlePos, myTargetPos, anyHandActive);
 
-    // STATE C: THE FIST NEBULA (Volumetric Swirl)
+    // STATE C: THE FIST NEBULA
     float nRadius = pow(rand1, 2.5) * uNebulaRadius; 
     float nTheta = rand2 * 6.28318; 
     float nPhi = acos(2.0 * rand3 - 1.0); 
@@ -133,13 +174,20 @@ void main() {
 
     finalPos = mix(finalPos, nebulaPos, uFistProgress);
 
-    // --- DYNAMIC IONIZED COLORING ---
+    // --- DYNAMIC TORNADO COLORING ---
     vec3 cIdle = boostNeon(uColorIdle);
     vec3 cThumb = boostNeon(uColorThumbsUp);
     vec3 cNebCore = boostNeon(uColorNebulaCore);
     vec3 cNebEdge = boostNeon(uColorNebulaEdge);
+    vec3 cTorCore = boostNeon(uColorTornadoCore);
+    vec3 cTorEdge = boostNeon(uColorTornadoEdge);
 
-    vec3 baseColor = mix(cIdle, cThumb, anyHandActive); 
+    vec3 cTornado = mix(cTorCore, cTorEdge, tHeightPct); 
+    
+    float myTornadoActive = mix(uTornadoActive.x, uTornadoActive.y, aTeam);
+    vec3 activeShapeColor = mix(cThumb, cTornado, myTornadoActive);
+
+    vec3 baseColor = mix(cIdle, activeShapeColor, anyHandActive); 
     
     float colorMix = clamp(distToCenter / 12.0, 0.0, 1.0);
     vec3 nebulaColor = mix(cNebCore, cNebEdge, colorMix);
@@ -173,6 +221,11 @@ void main() {
     
     float isScattering = step(0.001, uScatterForce);
     vis = mix(vis, 1.0, isScattering);
+
+    // Visually thin out the tornado slightly to make it look like blowing dust
+    float hideInTornado = step(0.15, rand1); // Hides 15% of particles
+    float tornadoThinning = mix(1.0, hideInTornado, myTornadoActive);
+    vis *= tornadoThinning;
 
     float flashStrength = sin(scatterPhase1 * 3.14159);
     vColor = mix(vColor, vec3(1.0, 1.0, 1.0), flashStrength * isScattering);

@@ -10,10 +10,10 @@ export class GestureComboManager {
             return;
         }
 
-        // 1. Check for Global Overrides (Fist / Scatter)
         const hasFist = hands.some(h => h.gestureName === "Closed_Fist");
         const hasPalm = hands.some(h => h.gestureName === "Open_Palm");
 
+        // Global overrides still take precedence
         if (hasFist) {
             this.lastFistTime = Date.now();
             this.particles.morphToFist();
@@ -26,20 +26,28 @@ export class GestureComboManager {
             return;
         }
 
-        // 2. Map Independent Thumb States
+        // Independent state tracking objects
         let thumbConfigs = { left: null, right: null };
-        let foundThumb = false;
+        let tornadoConfigs = { left: null, right: null };
+        let foundAnyShape = false;
         
         hands.forEach(hand => {
+            const side = hand.handedness === "Left" ? 'left' : 'right';
+            
             if (hand.gestureName === "Thumb_Up" || hand.gestureName === "Thumb_Down") {
-                const side = hand.handedness === "Left" ? 'left' : 'right';
                 thumbConfigs[side] = { isDown: hand.gestureName === "Thumb_Down" };
-                foundThumb = true;
+                foundAnyShape = true;
+            } else if (hand.gestureName === "Pointing_Up") {
+                tornadoConfigs[side] = { active: true };
+                foundAnyShape = true;
             }
         });
 
-        if (foundThumb) {
+        if (foundAnyShape) {
+            // We pass both configs. The respective State classes 
+            // will safely turn themselves off if their config is null!
             this.particles.morphToHand(thumbConfigs);
+            this.particles.morphToTornado(tornadoConfigs);
         } else {
             this.particles.resetIdle();
         }
