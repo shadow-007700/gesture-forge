@@ -13,7 +13,6 @@ export class GestureComboManager {
         const hasFist = hands.some(h => h.gestureName === "Closed_Fist");
         const hasPalm = hands.some(h => h.gestureName === "Open_Palm");
 
-        // Global overrides still take precedence
         if (hasFist) {
             this.lastFistTime = Date.now();
             this.particles.morphToFist();
@@ -26,9 +25,9 @@ export class GestureComboManager {
             return;
         }
 
-        // Independent state tracking objects
         let thumbConfigs = { left: null, right: null };
         let tornadoConfigs = { left: null, right: null };
+        let lotusConfigs = { left: null, right: null };
         let foundAnyShape = false;
         
         hands.forEach(hand => {
@@ -40,14 +39,16 @@ export class GestureComboManager {
             } else if (hand.gestureName === "Pointing_Up") {
                 tornadoConfigs[side] = { active: true };
                 foundAnyShape = true;
+            } else if (hand.gestureName === "ILoveYou") {
+                lotusConfigs[side] = { active: true };
+                foundAnyShape = true;
             }
         });
 
         if (foundAnyShape) {
-            // We pass both configs. The respective State classes 
-            // will safely turn themselves off if their config is null!
             this.particles.morphToHand(thumbConfigs);
             this.particles.morphToTornado(tornadoConfigs);
+            this.particles.morphToLotus(lotusConfigs);
         } else {
             this.particles.resetIdle();
         }

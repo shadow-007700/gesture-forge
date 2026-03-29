@@ -15,9 +15,11 @@ export class VFXController {
             thumbsUp: '#00ffff',
             nebCore: '#19ccff',
             nebEdge: '#cc1999',
-            // NEW: Void Storm Colors
-            tornadoCore: '#8a2be2', // Deep Violet
-            tornadoEdge: '#00ffff'  // Electric Cyan
+            tornadoCore: '#8a2be2', 
+            tornadoEdge: '#00ffff',
+            lotusTop: '#ff8800',  
+            lotusMid: '#22aa44',  
+            lotusBot: '#006400'   
         };
         
         this.physics = {
@@ -52,9 +54,13 @@ export class VFXController {
         colorFolder.addColor(this.colors, 'thumbsUp').name('Thumbs Up').onChange(c => this.updateColor('uColorThumbsUp', c));
         colorFolder.addColor(this.colors, 'nebCore').name('Nebula Core').onChange(c => this.updateColor('uColorNebulaCore', c));
         colorFolder.addColor(this.colors, 'nebEdge').name('Nebula Edge').onChange(c => this.updateColor('uColorNebulaEdge', c));
-        // NEW: GUI Hooks
+        
         colorFolder.addColor(this.colors, 'tornadoCore').name('Tornado Base').onChange(c => this.updateColor('uColorTornadoCore', c));
         colorFolder.addColor(this.colors, 'tornadoEdge').name('Tornado Flare').onChange(c => this.updateColor('uColorTornadoEdge', c));
+        
+        colorFolder.addColor(this.colors, 'lotusTop').name('Lotus Petals').onChange(c => this.updateColor('uColorLotusTop', c));
+        colorFolder.addColor(this.colors, 'lotusMid').name('Lotus Leaves').onChange(c => this.updateColor('uColorLotusMid', c));
+        colorFolder.addColor(this.colors, 'lotusBot').name('Lotus Stem').onChange(c => this.updateColor('uColorLotusBot', c));
 
         const physicsFolder = this.gui.addFolder('Physics Engine');
         physicsFolder.add(this.physics, 'nebulaRadius').min(10).max(60).step(0.5).name('Nebula Radius').onChange(v => this.updateFloat('uNebulaRadius', v));

@@ -3,6 +3,7 @@ import vertexShader from './shaders/vertex.glsl';
 import fragmentShader from './shaders/fragment.glsl';
 import { ThumbState } from './gestures/ThumbState.js';
 import { TornadoState } from './gestures/TornadoState.js';
+import { LotusState } from './gestures/LotusState.js';
 import { NebulaState } from './gestures/NebulaState.js';
 import { ScatterState } from './gestures/ScatterState.js';
 
@@ -22,6 +23,10 @@ export class ParticleSystem {
             uColorTornadoCore: { value: new THREE.Color('#8a2be2') },
             uColorTornadoEdge: { value: new THREE.Color('#00ffff') },
             
+            uColorLotusTop: { value: new THREE.Color('#ff8800') },
+            uColorLotusMid: { value: new THREE.Color('#22aa44') },
+            uColorLotusBot: { value: new THREE.Color('#006400') },
+            
             uNebulaRadius: { value: 26.0 },
             uThumbBuzz: { value: 0.15 },
             uThumbMaxSize: { value: 16.0 },
@@ -30,14 +35,15 @@ export class ParticleSystem {
             uThumbActive: { value: new THREE.Vector2(0.0, 0.0) },
             uThumbMirror: { value: new THREE.Vector2(-1.0, 1.0) },  
             uThumbRotation: { value: new THREE.Vector2(0.0, 0.0) },
-            uTornadoActive: { value: new THREE.Vector2(0.0, 0.0) }
+            uTornadoActive: { value: new THREE.Vector2(0.0, 0.0) },
+            uLotusActive: { value: new THREE.Vector2(0.0, 0.0) }
         };
 
         this.init();
 
-        // Register Gesture Controllers separately!
         this.thumbState = new ThumbState(this);
         this.tornadoState = new TornadoState(this);
+        this.lotusState = new LotusState(this);
         this.nebulaState = new NebulaState(this);
         this.scatterState = new ScatterState(this);
     }
@@ -47,6 +53,7 @@ export class ParticleSystem {
         
         const positions = new Float32Array(this.particleCount * 3); 
         const targetPositions = new Float32Array(this.particleCount * 3); 
+        const lotusPositions = new Float32Array(this.particleCount * 3);
         const randoms = new Float32Array(this.particleCount);
         const teams = new Float32Array(this.particleCount); 
         
@@ -67,11 +74,16 @@ export class ParticleSystem {
             targetPositions[i3 + 1] = positions[i3 + 1];
             targetPositions[i3 + 2] = positions[i3 + 2];
             
+            lotusPositions[i3] = positions[i3];
+            lotusPositions[i3 + 1] = positions[i3 + 1];
+            lotusPositions[i3 + 2] = positions[i3 + 2];
+            
             randoms[i] = Math.random(); 
         }
         
         this.geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
         this.geometry.setAttribute('aTargetPosition', new THREE.BufferAttribute(targetPositions, 3));
+        this.geometry.setAttribute('aLotusPosition', new THREE.BufferAttribute(lotusPositions, 3));
         this.geometry.setAttribute('aRandom', new THREE.BufferAttribute(randoms, 1));
         this.geometry.setAttribute('aTeam', new THREE.BufferAttribute(teams, 1)); 
         
@@ -98,15 +110,22 @@ export class ParticleSystem {
         this.tornadoState.trigger(configs);
     }
 
+    morphToLotus(configs) {
+        this.nebulaState.release();
+        this.lotusState.trigger(configs);
+    }
+
     morphToFist() {
         this.thumbState.release();
-        this.tornadoState.release(); // Override
+        this.tornadoState.release(); 
+        this.lotusState.release();
         this.nebulaState.trigger();
     }
 
     triggerScatter() {
         this.thumbState.release();
-        this.tornadoState.release(); // Override
+        this.tornadoState.release(); 
+        this.lotusState.release();
         this.nebulaState.release();
         this.scatterState.trigger();
     }
@@ -114,6 +133,7 @@ export class ParticleSystem {
     resetIdle() {
         this.thumbState.release();
         this.tornadoState.release();
+        this.lotusState.release();
         this.nebulaState.release();
     }
 
@@ -121,6 +141,7 @@ export class ParticleSystem {
         this.uniforms.uTime.value = elapsedTime;
         this.thumbState.update();
         this.tornadoState.update();
+        this.lotusState.update();
         this.nebulaState.update();
         this.scatterState.update();
     }

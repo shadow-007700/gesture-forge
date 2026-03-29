@@ -3,7 +3,6 @@ export class ThumbState {
         this.system = particleSystem;
         this.points = [{ x: 0, y: 0 }];
         
-        // UPGRADED: Track everything independently
         this.isActive = { left: false, right: false };
         this.currentRotation = { left: 0, right: 0 };
         this.targetRotation = { left: 0, right: 0 };
@@ -88,7 +87,6 @@ export class ThumbState {
         this.processHandConfig('left', configs.left);
         this.processHandConfig('right', configs.right);
         
-        // Only build the base points array once the image is loaded and a trigger occurs
         if (!this.built && this.points.length > 1) {
             this.buildPositions();
         }
@@ -97,6 +95,8 @@ export class ThumbState {
     processHandConfig(side, config) {
         if (!config) {
             this.isActive[side] = false;
+            // NEW: Reset rotation so future shapes don't spawn upside down
+            this.targetRotation[side] = 0; 
             return;
         }
         
@@ -123,7 +123,6 @@ export class ThumbState {
         const targetPositions = this.system.geometry.attributes.aTargetPosition.array;
         for (let i = 0; i < this.system.particleCount; i++) {
             const i3 = i * 3;
-            // Both teams just receive the raw base coordinates. The shader does the mirroring!
             const point = this.points[Math.floor(Math.random() * this.points.length)];
             const scale = 32.0;
             targetPositions[i3] = point.x * scale;

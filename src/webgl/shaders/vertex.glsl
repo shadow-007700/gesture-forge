@@ -9,6 +9,10 @@ uniform vec3 uColorNebulaEdge;
 uniform vec3 uColorTornadoCore;
 uniform vec3 uColorTornadoEdge;
 
+uniform vec3 uColorLotusTop;
+uniform vec3 uColorLotusMid;
+uniform vec3 uColorLotusBot;
+
 uniform float uNebulaRadius;
 uniform float uThumbBuzz;
 uniform float uThumbMaxSize;
@@ -18,9 +22,11 @@ uniform vec2 uThumbMirror;
 uniform vec2 uThumbRotation;
 uniform vec2 uThumbActive;
 uniform vec2 uTornadoActive; 
+uniform vec2 uLotusActive; 
 
 attribute float aRandom;
 attribute vec3 aTargetPosition;
+attribute vec3 aLotusPosition;
 attribute float aTeam; 
 
 varying float vVisibility;
@@ -34,50 +40,38 @@ void main() {
     idlePos.y += cos(uTime * 0.3 + aRandom * 10.0) * 1.5;
     idlePos.z += sin(uTime * 0.4 + aRandom * 10.0) * 1.5;
 
-    // We use these 3 INDEPENDENT random values to build a 3D volume, preventing the "Squiggle" artifact!
     float rand1 = fract(sin(aRandom * 12.9898) * 43758.5453);
     float rand2 = fract(sin(aRandom * 78.2330) * 43758.5453);
     float rand3 = fract(sin(aRandom * 39.3460) * 43758.5453);
 
     vec3 baseShape = aTargetPosition;
     
-    // --- REALISTIC VOLUMETRIC TORNADO GENERATOR ---
+    // --- PURE MATH TORNADO GENERATOR ---
     float tHeightPct = rand1; 
-    
-    // Lowered max height to 35.0 and shifted base down to -12.0 to stop overflowing
     float tHeight = (tHeightPct * 35.0) - 12.0; 
-    
-    // Decreased base radius to 0.6, increased top flare to 38.0
     float maxRadius = mix(0.6, 38.0, pow(tHeightPct, 4.0));
     
-    // The Debris Cloud: Adds a chaotic, chunky dust cloud at the very base
     float isDebris = 1.0 - step(0.12, tHeightPct);
     maxRadius += isDebris * (rand2 * 10.0); 
 
-    // Volumetric Fill: Distributes particles INSIDE the funnel wall, not just a 1D shell
-    // Using pow < 1.0 pushes most particles towards the outer edge, creating a hollow core!
     float r = maxRadius * pow(rand3, 0.4); 
-    
     float tAngle = rand2 * 6.28318;
     
-    // Adjusted spin speed back up to ~19.0 at the base based on feedback
     float tSpinSpeed = mix(19.0, 4.0, tHeightPct); 
     float curAngle = tAngle + (uTime * tSpinSpeed);
     
     vec3 mathTornado = vec3(cos(curAngle) * r, tHeight, sin(curAngle) * r);
     
-    // Realistic Spine Bend: A slow, lumbering sway, like a massive storm
     mathTornado.x += sin(tHeightPct * 2.0 + uTime * 1.2) * mix(0.0, 10.0, tHeightPct);
     mathTornado.z += cos(tHeightPct * 2.5 + uTime * 1.4) * mix(0.0, 10.0, tHeightPct);
 
-    // Chaotic wind turbulence inside the funnel
     mathTornado.x += sin(uTime * 5.0 + rand1 * 100.0) * mix(0.2, 2.0, tHeightPct);
     mathTornado.y += cos(uTime * 6.0 + rand2 * 100.0) * 0.5;
     mathTornado.z += sin(uTime * 4.5 + rand3 * 100.0) * mix(0.2, 2.0, tHeightPct);
 
     // --- SHAPE MIXING ---
-    vec3 shapeLeft = mix(baseShape, mathTornado, uTornadoActive.x);
-    vec3 shapeRight = mix(baseShape, mathTornado, uTornadoActive.y);
+    vec3 shapeLeft = mix(mix(baseShape, mathTornado, uTornadoActive.x), aLotusPosition, uLotusActive.x);
+    vec3 shapeRight = mix(mix(baseShape, mathTornado, uTornadoActive.y), aLotusPosition, uLotusActive.y);
 
     // 1. LEFT HAND GHOST 
     vec3 posLeft = shapeLeft;
@@ -100,15 +94,13 @@ void main() {
     );
     
     // --- COMBINED ACTIVE STATES ---
-    float activeLeft = max(uThumbActive.x, uTornadoActive.x);
-    float activeRight = max(uThumbActive.y, uTornadoActive.y);
+    float activeLeft = max(uThumbActive.x, max(uTornadoActive.x, uLotusActive.x));
+    float activeRight = max(uThumbActive.y, max(uTornadoActive.y, uLotusActive.y));
     
     // 3. DYNAMIC FRAMING
     float dualFactor = activeLeft * activeRight; 
     float scaleMulti = mix(1.0, 0.85, dualFactor); 
     
-    // BUG FIX: Anchor the Y-axis at the bottom (-12.0) before scaling!
-    // This stops the shapes from drastically floating upward when both hands are active.
     posLeft.xz *= scaleMulti;
     posLeft.y = (posLeft.y + 12.0) * scaleMulti - 12.0;
     
@@ -134,8 +126,8 @@ void main() {
         cos(uTime * 4.0 + rand3 * 50.0) * (20.0 * rand1)    
     );
 
-    float leakLeft = pow(sin(activeLeft * 3.14159), 0.6); 
-    float leakRight = pow(sin(activeRight * 3.14159), 0.6);
+    float leakLeft = pow(max(0.0, sin(activeLeft * 3.14159)), 0.6); 
+    float leakRight = pow(max(0.0, sin(activeRight * 3.14159)), 0.6);
 
     vec3 targetLeft = mix(posRight, posLeft, activeLeft) + (fluidGravity * leakLeft);
     vec3 targetRight = mix(posLeft, posRight, activeRight) + (fluidGravity * leakRight);
@@ -174,18 +166,40 @@ void main() {
 
     finalPos = mix(finalPos, nebulaPos, uFistProgress);
 
-    // --- DYNAMIC TORNADO COLORING ---
+    // --- DYNAMIC COLORING ---
     vec3 cIdle = boostNeon(uColorIdle);
     vec3 cThumb = boostNeon(uColorThumbsUp);
     vec3 cNebCore = boostNeon(uColorNebulaCore);
     vec3 cNebEdge = boostNeon(uColorNebulaEdge);
     vec3 cTorCore = boostNeon(uColorTornadoCore);
     vec3 cTorEdge = boostNeon(uColorTornadoEdge);
+    
+    vec3 cLotTop = boostNeon(uColorLotusTop);
+    vec3 cLotMid = boostNeon(uColorLotusMid);
+    vec3 cLotBot = boostNeon(uColorLotusBot);
 
     vec3 cTornado = mix(cTorCore, cTorEdge, tHeightPct); 
     
-    float myTornadoActive = mix(uTornadoActive.x, uTornadoActive.y, aTeam);
-    vec3 activeShapeColor = mix(cThumb, cTornado, myTornadoActive);
+    float lotusYPct = clamp((aLotusPosition.y + 16.0) / 32.0, 0.0, 1.0);
+    
+    // PERFECT CALIBRATION: Stem (Bot) to Leaves (Mid) at exactly 33.6% (660px)
+    vec3 colorBotToMid = mix(cLotBot, cLotMid, smoothstep(0.31, 0.36, lotusYPct));
+    
+    // PERFECT CALIBRATION: Leaves (Mid) to Petals (Top) at exactly 47.3% (524px)
+    vec3 cLotus = mix(colorBotToMid, cLotTop, smoothstep(0.49, 0.50, lotusYPct));
+    
+    vec3 cShapeLeft = cThumb;
+    cShapeLeft = mix(cShapeLeft, cTornado, uTornadoActive.x);
+    cShapeLeft = mix(cShapeLeft, cLotus, uLotusActive.x);
+
+    vec3 cShapeRight = cThumb;
+    cShapeRight = mix(cShapeRight, cTornado, uTornadoActive.y);
+    cShapeRight = mix(cShapeRight, cLotus, uLotusActive.y);
+
+    vec3 targetColorLeft = mix(cShapeRight, cShapeLeft, activeLeft);
+    vec3 targetColorRight = mix(cShapeLeft, cShapeRight, activeRight);
+
+    vec3 activeShapeColor = mix(targetColorLeft, targetColorRight, aTeam);
 
     vec3 baseColor = mix(cIdle, activeShapeColor, anyHandActive); 
     
@@ -222,8 +236,9 @@ void main() {
     float isScattering = step(0.001, uScatterForce);
     vis = mix(vis, 1.0, isScattering);
 
-    // Visually thin out the tornado slightly to make it look like blowing dust
-    float hideInTornado = step(0.15, rand1); // Hides 15% of particles
+    // FIX: Restored the missing myTornadoActive variable so the shader can compile!
+    float myTornadoActive = mix(uTornadoActive.x, uTornadoActive.y, aTeam);
+    float hideInTornado = step(0.15, rand1); 
     float tornadoThinning = mix(1.0, hideInTornado, myTornadoActive);
     vis *= tornadoThinning;
 
